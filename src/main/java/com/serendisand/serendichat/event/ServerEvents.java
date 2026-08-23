@@ -7,9 +7,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-
-import java.lang.reflect.Method;
 
 public class ServerEvents {
 
@@ -46,58 +45,31 @@ public class ServerEvents {
             }
         });
 
-        ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
+        // 取消原生聊天广播，改为广播格式化后的消息
+        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, bound) -> {
             try {
                 if (sender == null) {
-                    return;
+                    return true;
                 }
 
-                String rawMessage = extractRawMessage(message);
+                String rawMessage = message.decoratedContent().getString();
                 if (rawMessage == null || rawMessage.isEmpty()) {
-                    return;
+                    return true;
                 }
 
                 Component formattedMessage = formatter.format(sender, rawMessage);
 
-                try {
-                    Method setMessageMethod = params.getClass().getMethod("setMessage", Component.class);
-                    setMessageMethod.invoke(params, formattedMessage);
-                } catch (Exception e) {
-                    try {
-                        java.lang.reflect.Field field = params.getClass().getDeclaredField("message");
-                        field.setAccessible(true);
-                        field.set(params, formattedMessage);
-                    } catch (Exception ex) {
-                        SerendiChat.LOGGER.error("Failed to set formatted message", ex);
-                    }
+                MinecraftServer server = sender.level().getServer();
+                if (server != null) {
+                    server.getPlayerList().broadcastSystemMessage(formattedMessage, false);
                 }
 
                 data.updatePlayTime(sender);
-
+                return false;
             } catch (Exception e) {
                 SerendiChat.LOGGER.error("Failed to format chat message", e);
+                return true;
             }
         });
-    }
-
-    private String extractRawMessage(Object message) {
-        try {
-            Object content = message.getClass().getMethod("getContent").invoke(message);
-            if (content instanceof Component) {
-                return ((Component) content).getString();
-            }
-        } catch (Exception ignored) {
-        }
-        try {
-            Method getStringMethod = message.getClass().getMethod("getString");
-            return (String) getStringMethod.invoke(message);
-        } catch (Exception ignored) {
-        }
-        try {
-            return message.toString();
-        } catch (Exception e) {
-            SerendiChat.LOGGER.warn("Failed to get message content");
-            return null;
-        }
     }
 }
