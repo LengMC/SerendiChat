@@ -77,25 +77,19 @@ public class ChatFormatter {
     }
 
     private MutableComponent buildStarBlock(int stars) {
-        if (stars <= 0) {
-            return Component.literal("0※").withStyle(ChatFormatting.GRAY);
-        }
-
-        int displayStars = Math.min(stars, config.maxStars);
+        String text = stars + "※";
         ChatFormatting color = getStarColor(stars);
 
         if (color == null) {
             MutableComponent result = Component.empty();
-            for (int i = 0; i < Math.min(displayStars, 50); i++) {
-                result.append(Component.literal("※").withStyle(RAINBOW[i % RAINBOW.length]));
-            }
-            if (displayStars > 50) {
-                result.append(Component.literal("...").withStyle(ChatFormatting.GRAY));
+            for (int i = 0; i < text.length(); i++) {
+                result.append(Component.literal(String.valueOf(text.charAt(i)))
+                        .withStyle(RAINBOW[i % RAINBOW.length]));
             }
             return result;
         }
 
-        return Component.literal("※".repeat(Math.min(displayStars, 50))).withStyle(color);
+        return Component.literal(text).withStyle(color);
     }
 
     private ChatFormatting getStarColor(int stars) {
