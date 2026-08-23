@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class ChatConfig {
 
-    public String format = "[{stars}※] <{prefix}{nickname}{suffix}> -> {message}";
+    public String format = "[{stars}※] <{prefix} {nickname} {suffix}> -> {message}";
     public boolean adminColor = true;
     public int rainbowThreshold = 120;
     public int maxStars = 1000;
