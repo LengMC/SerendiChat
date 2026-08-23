@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "serendichat",
+  "version": "${version}",
+  "name": "SerendiChat",
+  "description": "Chat formatting mod with star‑based uptime counter and optional Custom Names/LuckPerms integration.",
+  "authors": ["Serendisand"],
+  "contact": {
+    "homepage": "https://github.com/Serendisand/SerendiChat",
+    "sources": "https://github.com/Serendisand/SerendiChat"
+  },
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "com.serendisand.serendichat.SerendiChat"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "fabric-api": ">=0.158.0",
+    "minecraft": "26.2",
+    "java": ">=25"
+  },
+  "suggests": {
+    "customname": "*",
+    "luckperms": "*"
+  }
+}

@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# IDE - VS Code / Eclipse
+.vscode/
+.settings/
+.classpath
+.project
+bin/
+
+# Minecraft 运行目录（客户端/服务端测试数据）
+run/
+
+# Fabric Loom 本地缓存
+remappedSrc/
+**/remapped*
+
+# 日志与系统文件
+*.log
+.DS_Store
+Thumbs.db
