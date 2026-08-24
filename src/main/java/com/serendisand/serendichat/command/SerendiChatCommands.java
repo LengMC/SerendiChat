@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.serendisand.serendichat.data.PlayerDataManager;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
@@ -23,6 +24,15 @@ public class SerendiChatCommands {
     public void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(Commands.literal("serendichat")
+                    .executes(ctx -> {
+                        sendHelp(ctx.getSource());
+                        return 1;
+                    })
+                    .then(Commands.literal("help")
+                            .executes(ctx -> {
+                                sendHelp(ctx.getSource());
+                                return 1;
+                            }))
                     .then(Commands.literal("setstars")
                             .requires(source -> source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER))
                             .then(Commands.argument("target", EntityArgument.player())
@@ -76,5 +86,15 @@ public class SerendiChatCommands {
                             }))
             );
         });
+    }
+
+    private static void sendHelp(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("§6===== SerendiChat 命令帮助 ====="), false);
+        source.sendSuccess(() -> Component.literal("§e/serendichat stars §7- 查询你的星数"), false);
+        source.sendSuccess(() -> Component.literal("§e/serendichat help §7- 显示本帮助信息"), false);
+        source.sendSuccess(() -> Component.literal("§e/serendichat setstars <玩家> <星数> §7- 设置玩家星数 §8(管理员)"), false);
+        source.sendSuccess(() -> Component.literal("§e/serendichat resetstars <玩家> §7- 重置玩家星数 §8(管理员)"), false);
+        source.sendSuccess(() -> Component.literal("§e/serendichat admincolor <true|false> §7- 开关管理员红色聊天 §8(管理员)"), false);
+        source.sendSuccess(() -> Component.literal("§e/serendichat reload §7- 重载配置文件 §8(管理员)"), false);
     }
 }
