@@ -142,7 +142,7 @@ public class SerendiChatCommands {
     }
 
     private List<Map.Entry<String, Integer>> collectStars() {
-        List<Map.Entry<String, Integer>> entries = new ArrayList<Map.Entry<String, Integer>>(data.snapshotStars());
+        List<Map.Entry<String, Integer>> entries = new ArrayList<>(data.snapshotStars().entrySet());
         entries.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).reversed());
         return entries;
     }
