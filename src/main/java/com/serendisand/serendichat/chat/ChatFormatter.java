@@ -224,7 +224,7 @@ public class ChatFormatter {
 
         if (config.mentionEnabled) {
             for (MentionDetector.Mention m : MentionDetector.find(player.level().getServer(), message)) {
-                segments.add(Segment.mention(m.start(), m.end(), m.target(), m.name()));
+                segments.add(Segment.mention(m.start(), m.end(), m.target(), m.text()));
             }
         }
 
@@ -248,15 +248,15 @@ public class ChatFormatter {
         final Kind kind;
         // mention / url 数据
         final ServerPlayer mentionTarget;
-        final String mentionName;
+        final String mentionText;
         final String url;
 
-        private Segment(int start, int end, Kind kind, ServerPlayer mentionTarget, String mentionName, String url) {
+        private Segment(int start, int end, Kind kind, ServerPlayer mentionTarget, String mentionText, String url) {
             this.start = start;
             this.end = end;
             this.kind = kind;
             this.mentionTarget = mentionTarget;
-            this.mentionName = mentionName;
+            this.mentionText = mentionText;
             this.url = url;
         }
 
@@ -264,8 +264,8 @@ public class ChatFormatter {
             return new Segment(s, e, Kind.ITEM, null, null, null);
         }
 
-        static Segment mention(int s, int e, ServerPlayer target, String name) {
-            return new Segment(s, e, Kind.MENTION, target, name, null);
+        static Segment mention(int s, int e, ServerPlayer target, String text) {
+            return new Segment(s, e, Kind.MENTION, target, text, null);
         }
 
         static Segment url(int s, int e, String url) {
@@ -277,13 +277,13 @@ public class ChatFormatter {
                 case ITEM -> ItemDisplayRenderer.render(player,
                         message.substring(start, end), baseColor, f.config.markdownEnabled);
                 case MENTION -> {
-                    MutableComponent comp = Component.literal("@" + mentionName)
+                    MutableComponent comp = Component.literal(mentionText)
                             .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD);
                     String cmd = f.config.msgCommandTemplate.replace("{player}", mentionTarget.getScoreboardName());
                     comp = comp.withStyle(style -> style
                             .withClickEvent(new ClickEvent.SuggestCommand(cmd))
                             .withHoverEvent(new HoverEvent.ShowText(
-                                    Component.literal("点击私信 " + mentionName))));
+                                    Component.literal("点击私信 " + mentionTarget.getScoreboardName()))));
                     yield comp;
                 }
                 case URL -> {

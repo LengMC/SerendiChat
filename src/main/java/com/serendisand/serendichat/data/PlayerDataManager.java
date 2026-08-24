@@ -24,6 +24,7 @@ public class PlayerDataManager {
     private final Path starsFile;
     private final Path adminFile;
     private final Path playtimeFile;
+    private final Path namesFile;
 
     private final Map<String, Integer> playerStars = new ConcurrentHashMap<>();
     private final Map<String, Boolean> adminColorEnabled = new ConcurrentHashMap<>();
@@ -31,6 +32,8 @@ public class PlayerDataManager {
     private final Map<String, AtomicInteger> playerPlayTimeMinutes = new ConcurrentHashMap<>();
     /** 最近一次发言时间（毫秒），用于反垃圾冷却。 */
     private final Map<String, Long> lastMessageTime = new ConcurrentHashMap<>();
+    /** UUID -> 最后使用的玩家名，用于排行榜等场景显示离线玩家。 */
+    private final Map<String, String> playerNames = new ConcurrentHashMap<>();
 
     public PlayerDataManager(ChatConfig config) {
         this.config = config;
@@ -38,6 +41,7 @@ public class PlayerDataManager {
         this.starsFile = dir.resolve("serendichat_stars.properties");
         this.adminFile = dir.resolve("serendichat_admin.properties");
         this.playtimeFile = dir.resolve("serendichat_playtime.properties");
+        this.namesFile = dir.resolve("serendichat_names.properties");
     }
 
     public void onJoin(ServerPlayer player) {
@@ -46,6 +50,7 @@ public class PlayerDataManager {
         adminColorEnabled.putIfAbsent(uuid, config.adminColor);
         playerOnlineTime.putIfAbsent(uuid, System.currentTimeMillis());
         playerPlayTimeMinutes.putIfAbsent(uuid, new AtomicInteger(0));
+        playerNames.put(uuid, player.getScoreboardName());
     }
 
     public void onDisconnect(ServerPlayer player) {
@@ -92,6 +97,24 @@ public class PlayerDataManager {
         AtomicInteger minutes = playerPlayTimeMinutes.get(uuid);
         if (minutes == null) return 0;
         return (minutes.get() / 60) / config.starsPerHour;
+    }
+
+    /** 按 UUID 查询总星数（手动 + 在线奖励）。 */
+    public int getTotalStarsByUuid(String uuid) {
+        return getManualStars(uuid) + getPlaytimeStarsByUuid(uuid);
+    }
+
+    /** 所有出现过的玩家 UUID（含只有在线记录的），供排行榜使用。 */
+    public java.util.Set<String> knownUuids() {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        out.addAll(playerStars.keySet());
+        out.addAll(playerPlayTimeMinutes.keySet());
+        return out;
+    }
+
+    /** 按 UUID 获取缓存的玩家名；离线或未知返回 null。 */
+    public String getNameByUuid(String uuid) {
+        return playerNames.get(uuid);
     }
 
     /** 当前所有玩家的 (uuid, manualStars) 快照，供排行榜使用。 */
@@ -144,12 +167,14 @@ public class PlayerDataManager {
         loadStars();
         loadAdminColors();
         loadPlayTime();
+        loadNames();
     }
 
     public void saveAll() {
         saveStars();
         saveAdminColors();
         savePlayTime();
+        saveNames();
     }
 
     private void saveStars() {
@@ -243,6 +268,36 @@ public class PlayerDataManager {
             }
         } catch (Exception e) {
             LOGGER.error("Failed to load play time data", e);
+        }
+    }
+
+    private void saveNames() {
+        try {
+            Properties props = new Properties();
+            for (Map.Entry<String, String> e : playerNames.entrySet()) {
+                props.setProperty(e.getKey(), e.getValue());
+            }
+            Files.createDirectories(namesFile.getParent());
+            try (var out = Files.newOutputStream(namesFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                props.store(out, "SerendiChat player names");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to save player names", e);
+        }
+    }
+
+    private void loadNames() {
+        try {
+            if (Files.notExists(namesFile)) return;
+            Properties props = new Properties();
+            try (var in = Files.newInputStream(namesFile)) {
+                props.load(in);
+            }
+            for (String key : props.stringPropertyNames()) {
+                playerNames.put(key, props.getProperty(key));
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load player names", e);
         }
     }
 }

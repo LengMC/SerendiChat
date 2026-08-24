@@ -9,7 +9,9 @@ import com.serendisand.serendichat.data.PlayerDataManager;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -80,8 +82,8 @@ public class ServerEvents {
                 if (server != null) {
                     server.getPlayerList().broadcastSystemMessage(formattedMessage, false);
 
-                    // 给被 @ 玩家单独播放提示音（仅本人听到）
-                    if (config.mentionEnabled && config.mentionSoundEnabled) {
+                    // 给被提及玩家播放铁砧音效 + actionbar 提示（仅本人可见/可听）
+                    if (config.mentionEnabled) {
                         notifyMentions(server, sender, rawMessage);
                     }
                 }
@@ -98,22 +100,37 @@ public class ServerEvents {
         });
     }
 
-    /** 给所有被 @ 且非发送者本人的玩家播放提示音。 */
+    /** 给所有被提及（非发送者本人）的玩家播放铁砧音效并显示 actionbar 提示。 */
     private void notifyMentions(MinecraftServer server, ServerPlayer sender, String message) {
         List<MentionDetector.Mention> mentions = MentionDetector.find(server, message);
         if (mentions.isEmpty()) return;
 
         Set<java.util.UUID> notified = new HashSet<>();
-        net.minecraft.sounds.SoundEvent event = BuiltInRegistries.SOUND_EVENT.getValue(
-                net.minecraft.resources.Identifier.tryParse("minecraft:entity.experience_orb.pickup"));
-        if (event == null) return;
+        net.minecraft.sounds.SoundEvent event = config.mentionSoundEnabled
+                ? BuiltInRegistries.SOUND_EVENT.getValue(
+                        net.minecraft.resources.Identifier.tryParse("minecraft:block.anvil.land"))
+                : null;
 
         for (MentionDetector.Mention mention : mentions) {
-            if (notified.add(mention.target().getUUID())
-                    && !mention.target().getUUID().equals(sender.getUUID())) {
+            ServerPlayer target = mention.target();
+            if (target.getUUID().equals(sender.getUUID())) continue;
+            if (!notified.add(target.getUUID())) continue;
+
+            // 铁砧提示音
+            if (event != null) {
                 // 26.x: Player.playSound(SoundEvent, float, float)
-                mention.target().playSound(event, 0.6f, 1.6f);
+                target.playSound(event, 0.4f, 1.0f);
             }
+
+            // actionbar: [!] xxx 在聊天中提及了你
+            MutableComponent tip = net.minecraft.network.chat.Component.empty()
+                    .append(net.minecraft.network.chat.Component.literal("[!] ")
+                            .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+                    .append(net.minecraft.network.chat.Component.literal(sender.getScoreboardName())
+                            .withStyle(ChatFormatting.GOLD))
+                    .append(net.minecraft.network.chat.Component.literal(" 在聊天中提及了你")
+                            .withStyle(ChatFormatting.YELLOW));
+            target.sendOverlayMessage(tip);
         }
     }
 }

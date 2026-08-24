@@ -46,8 +46,8 @@ public class ChatConfig {
 
     // ----- 私信 -----
     public boolean privateMsgEnabled = true;
-    /** 私信显示风格: ACTION（* 玩家1 悄悄对 玩家2 说*）或 CHAT（[私信] ...） */
-    public String privateMsgFormat = "ACTION";
+    /** 私信显示风格: CHAT（[你 -> 玩家] 内容）或 ACTION（* 你 悄悄对 玩家 说: 内容*） */
+    public String privateMsgFormat = "CHAT";
 
     // ----- 反垃圾 -----
     /** 同玩家两条消息之间最少间隔秒数，0 表示不限制 */

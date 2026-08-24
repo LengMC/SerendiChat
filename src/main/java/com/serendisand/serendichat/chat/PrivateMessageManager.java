@@ -15,7 +15,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 私信路由与渲染。
  * 支持 /msg、/tell、/whisper、/r 四种命令。
- * 显示样式: [prefix namesuffix -> 目标] 内容，方括号灰色，其余按 prefix+nickname+suffix 着色。
+ * 格式由配置 private_msg_format 决定:
+ *   CHAT:   [你 -> 目标] 内容
+ *   ACTION: * 你 悄悄对 目标 说: 内容*
+ * 发送方视角左侧显示"你"，接收方视角右侧显示"你"。
  */
 public class PrivateMessageManager {
 
@@ -80,19 +83,32 @@ public class PrivateMessageManager {
     /**
      * 构建私信消息本体。
      * fromIsReader=true 表示渲染视角是发送方（左侧显示"你"），否则渲染视角是接收方（右侧显示"你"）。
-     * 样式: [from -> to] 内容，方括号灰色。
+     * CHAT 格式: [from -> to] 内容，方括号灰色；
+     * ACTION 格式: * from 悄悄对 to 说: 内容*
      */
     private Component buildMessage(ServerPlayer from, ServerPlayer to, String message, boolean fromIsReader) {
-        MutableComponent bracketOpen = Component.literal("[").withStyle(ChatFormatting.GRAY);
-        MutableComponent bracketClose = Component.literal("]").withStyle(ChatFormatting.GRAY);
-        MutableComponent arrow = Component.literal(" -> ").withStyle(ChatFormatting.DARK_GRAY);
-
         MutableComponent left = fromIsReader
-                ? Component.literal("你").withStyle(ChatFormatting.YELLOW)
+                ? you()
                 : buildName(from);
         MutableComponent right = fromIsReader
                 ? buildName(to)
-                : Component.literal("你").withStyle(ChatFormatting.YELLOW);
+                : you();
+
+        if ("action".equalsIgnoreCase(config.privateMsgFormat)) {
+            return Component.empty()
+                    .append(Component.literal("* ").withStyle(ChatFormatting.DARK_GRAY))
+                    .append(left)
+                    .append(Component.literal(" 悄悄对 ").withStyle(ChatFormatting.GRAY))
+                    .append(right)
+                    .append(Component.literal(" 说: ").withStyle(ChatFormatting.GRAY))
+                    .append(Component.literal(message).withStyle(ChatFormatting.WHITE))
+                    .append(Component.literal("*").withStyle(ChatFormatting.DARK_GRAY));
+        }
+
+        // CHAT（默认）: [你 -> 目标] 内容
+        MutableComponent bracketOpen = Component.literal("[").withStyle(ChatFormatting.GRAY);
+        MutableComponent bracketClose = Component.literal("]").withStyle(ChatFormatting.GRAY);
+        MutableComponent arrow = Component.literal(" -> ").withStyle(ChatFormatting.DARK_GRAY);
 
         return Component.empty()
                 .append(bracketOpen)
@@ -102,6 +118,10 @@ public class PrivateMessageManager {
                 .append(bracketClose)
                 .append(Component.literal(" "))
                 .append(Component.literal(message).withStyle(ChatFormatting.WHITE));
+    }
+
+    private MutableComponent you() {
+        return Component.literal("你").withStyle(ChatFormatting.YELLOW);
     }
 
     private void playNotification(ServerPlayer target) {

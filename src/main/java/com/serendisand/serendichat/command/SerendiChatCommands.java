@@ -14,7 +14,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +31,10 @@ public class SerendiChatCommands {
 
     public void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+            // 原版 /msg /tell /w 会与自定义格式冲突（Brigadier 中先注册者优先），
+            // 先移除原版节点，让本模组的私信格式生效
+            removeVanillaPrivateMsgCommands(dispatcher);
+
             dispatcher.register(Commands.literal("serendichat")
                     .executes(ctx -> {
                         sendHelp(ctx.getSource());
@@ -90,20 +93,25 @@ public class SerendiChatCommands {
                                 List<Map.Entry<String, Integer>> entries = collectStars();
                                 ctx.getSource().sendSuccess(() ->
                                         Component.literal("§6===== 星数排行榜（前 10）====="), false);
-                                int rank = 1;
-                                for (Map.Entry<String, Integer> e : entries) {
+                                for (int i = 0; i < 10; i++) {
+                                    final int rank = i + 1;
+                                    if (i >= entries.size()) {
+                                        // 人数不足 10 时，后面的名次显示 "-"
+                                        final String line = "§e#" + rank + " §7-";
+                                        ctx.getSource().sendSuccess(() ->
+                                                Component.literal(line), false);
+                                        continue;
+                                    }
+                                    Map.Entry<String, Integer> e = entries.get(i);
                                     String name = resolveName(ctx.getSource(), e.getKey());
                                     int total = e.getValue();
                                     int playtime = data.getPlaytimeStarsByUuid(e.getKey());
-                                    final int r = rank;
                                     final String n = name;
                                     final int t = total;
                                     final int p = playtime;
                                     ctx.getSource().sendSuccess(() ->
-                                            Component.literal("§e#" + r + " §a" + n
+                                            Component.literal("§e#" + rank + " §a" + n
                                                     + " §7- §e" + t + " §7星 §8(奖励 " + p + ")"), false);
-                                    rank++;
-                                    if (rank > 10) break;
                                 }
                                 return 1;
                             }))
@@ -141,18 +149,62 @@ public class SerendiChatCommands {
         });
     }
 
+    /** 排行榜数据：手动星 + 在线奖励星 的总星数，按总星数降序。 */
     private List<Map.Entry<String, Integer>> collectStars() {
-        List<Map.Entry<String, Integer>> entries = new ArrayList<>(data.snapshotStars().entrySet());
-        entries.sort(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue).reversed());
+        Map<String, Integer> totals = new java.util.LinkedHashMap<>();
+        for (String uuid : data.knownUuids()) {
+            totals.put(uuid, data.getTotalStarsByUuid(uuid));
+        }
+        List<Map.Entry<String, Integer>> entries = new ArrayList<>(totals.entrySet());
+        entries.sort(Map.Entry.<String, Integer>comparingByValue().reversed());
         return entries;
     }
 
     private String resolveName(CommandSourceStack source, String uuid) {
+        java.util.UUID id;
+        try {
+            id = java.util.UUID.fromString(uuid);
+        } catch (IllegalArgumentException e) {
+            return "-";
+        }
         if (source.getServer() != null) {
-            ServerPlayer online = source.getServer().getPlayerList().getPlayer(java.util.UUID.fromString(uuid));
+            ServerPlayer online = source.getServer().getPlayerList().getPlayer(id);
             if (online != null) return online.getScoreboardName();
         }
-        return uuid.substring(0, Math.min(8, uuid.length()));
+        // 离线玩家使用缓存的名称；未知则显示 "-"
+        String cached = data.getNameByUuid(uuid);
+        return cached != null ? cached : "-";
+    }
+
+    /**
+     * 移除原版的 /msg /tell /w 命令节点。
+     * Brigadier 注册同名 literal 时是合并而非覆盖，且先注册者（原版）在歧义解析中优先，
+     * 导致本模组的私信格式永远不生效，因此这里直接删除原版节点后再注册自己的。
+     */
+    @SuppressWarnings("unchecked")
+    private static void removeVanillaPrivateMsgCommands(
+            com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher) {
+        var root = dispatcher.getRoot();
+        for (String cmd : new String[]{"msg", "tell", "w"}) {
+            com.mojang.brigadier.tree.CommandNode<CommandSourceStack> node = root.getChild(cmd);
+            if (node == null) continue;
+            try {
+                java.lang.reflect.Field children = com.mojang.brigadier.tree.CommandNode.class
+                        .getDeclaredField("children");
+                children.setAccessible(true);
+                ((Map<String, com.mojang.brigadier.tree.CommandNode<?>>) children.get(root)).remove(cmd);
+                java.lang.reflect.Field literals = com.mojang.brigadier.tree.CommandNode.class
+                        .getDeclaredField("literals");
+                literals.setAccessible(true);
+                Object lit = literals.get(root);
+                if (lit instanceof Map<?, ?> m) {
+                    ((Map<String, ?>) m).remove(cmd);
+                }
+            } catch (ReflectiveOperationException | ClassCastException e) {
+                com.serendisand.serendichat.SerendiChat.LOGGER
+                        .warn("Failed to remove vanilla command /{}: {}", cmd, e.getMessage());
+            }
+        }
     }
 
     private static void sendHelp(CommandSourceStack source) {

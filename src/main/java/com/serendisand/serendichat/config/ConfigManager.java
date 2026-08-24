@@ -145,15 +145,16 @@ public class ConfigManager {
                 "click_to_msg: true\n" +
                 "# 私信命令模板，{player} 会被替换为玩家名\n" +
                 "msg_command_template: \"/tell {player} \"\n" +
-                "# @玩家 提及：被 @ 的人会收到提示音，点击 @ 名可发起私信\n" +
+                "# 玩家提及：直接输入玩家 ID（或 @ID）即可提及，被提及者会收到铁砧音效和 actionbar 提示，\n" +
+                "# 点击聊天中的名字可发起私信\n" +
                 "enable_mention: true\n" +
                 "mention_sound: true\n" +
                 "# 消息中的 URL 自动变为可点击\n" +
                 "url_click_enabled: true\n\n" +
                 "# ----- 私信 -----\n" +
                 "enable_private_msg: true\n" +
-                "# ACTION: * A 悄悄对 B 说: hi*  CHAT: [私信] A -> B: hi\n" +
-                "private_msg_format: \"ACTION\"\n\n" +
+                "# CHAT: [你 -> 玩家] 内容   ACTION: * 你 悄悄对 玩家 说: 内容*\n" +
+                "private_msg_format: \"CHAT\"\n\n" +
                 "# ----- 反垃圾 -----\n" +
                 "# 同玩家两条消息之间的最少间隔秒数，0 表示不限制\n" +
                 "spam_cooldown_seconds: 0\n\n" +
