@@ -36,14 +36,16 @@ public class ChatLogger implements AutoCloseable {
         this.config = config;
         Path dir = FabricLoader.getInstance().getConfigDir();
         this.logFile = dir.resolve("serendichat_chat.log");
-        // 仅当日志开启时才启动后台线程，避免闲置线程占用资源
-        this.queue = config.chatLogEnabled ? new LinkedBlockingQueue<>(4096) : null;
-        this.writerThread = null;
         if (config.chatLogEnabled) {
+            // 仅当日志开启时才启动后台线程，避免闲置线程占用资源
+            this.queue = new LinkedBlockingQueue<>(4096);
             running.set(true);
             this.writerThread = new Thread(this::drain, "SerendiChat-LogWriter");
             this.writerThread.setDaemon(true);
             this.writerThread.start();
+        } else {
+            this.queue = null;
+            this.writerThread = null;
         }
     }
 

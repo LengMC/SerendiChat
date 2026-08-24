@@ -8,7 +8,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundSource;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -108,9 +107,10 @@ public class PrivateMessageManager {
     private void playNotification(ServerPlayer target) {
         // 26.x: 通过注册表查找 SoundEvent，避免直接依赖具体常量名（跨版本稳定性更好）
         SoundEvent event = BuiltInRegistries.SOUND_EVENT.getValue(
-                net.minecraft.resources.ResourceLocation.parse("minecraft:entity.experience_orb.pickup"));
+                net.minecraft.resources.Identifier.tryParse("minecraft:entity.experience_orb.pickup"));
         if (event != null) {
-            target.playSound(event, SoundSource.PLAYERS, 0.6f, 1.4f);
+            // 26.x 中 Player.playSound(SoundEvent, float, float) 是唯一带音量音调的签名
+            target.playSound(event, 0.6f, 1.4f);
         }
     }
 

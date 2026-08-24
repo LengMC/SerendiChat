@@ -289,7 +289,7 @@ public class ChatFormatter {
                 case URL -> {
                     String display = message.substring(start, end);
                     MutableComponent link = Component.literal(display)
-                            .withStyle(ChatFormatting.AQUA, ChatFormatting.UNDERLINED)
+                            .withStyle(ChatFormatting.AQUA, ChatFormatting.UNDERLINE)
                             .withStyle(style -> style
                                     .withClickEvent(new ClickEvent.OpenUrl(
                                             URI.create(UrlDetector.normalizeForClick(url)))));

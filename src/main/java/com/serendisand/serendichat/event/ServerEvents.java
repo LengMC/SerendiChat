@@ -13,8 +13,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraft.sounds.SoundSource;
 
 import java.util.HashSet;
 import java.util.List;
@@ -106,14 +104,15 @@ public class ServerEvents {
         if (mentions.isEmpty()) return;
 
         Set<java.util.UUID> notified = new HashSet<>();
-        SoundEvent event = BuiltInRegistries.SOUND_EVENT.getValue(
-                net.minecraft.resources.ResourceLocation.parse("minecraft:entity.experience_orb.pickup"));
+        net.minecraft.sounds.SoundEvent event = BuiltInRegistries.SOUND_EVENT.getValue(
+                net.minecraft.resources.Identifier.tryParse("minecraft:entity.experience_orb.pickup"));
         if (event == null) return;
 
         for (MentionDetector.Mention mention : mentions) {
             if (notified.add(mention.target().getUUID())
                     && !mention.target().getUUID().equals(sender.getUUID())) {
-                mention.target().playSound(event, SoundSource.PLAYERS, 0.6f, 1.6f);
+                // 26.x: Player.playSound(SoundEvent, float, float)
+                mention.target().playSound(event, 0.6f, 1.6f);
             }
         }
     }
