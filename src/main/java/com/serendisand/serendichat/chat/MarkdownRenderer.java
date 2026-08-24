@@ -1,6 +1,5 @@
 package com.serendisand.serendichat.chat;
 
-import com.serendisand.serendichat.config.ChatConfig;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -11,6 +10,7 @@ import java.util.regex.Pattern;
 
 /**
  * 聊天 Markdown 渲染：**粗体**、__下划线__、~~删除线~~、*斜体*、`代码`。
+ * 渲染时按 Unicode 代码点迭代，避免把 emoji 代理对拆成两个孤立的 ?。
  */
 public final class MarkdownRenderer {
 
@@ -20,7 +20,7 @@ public final class MarkdownRenderer {
     private MarkdownRenderer() {
     }
 
-    public static boolean contains(ChatConfig config, String text) {
+    public static boolean contains(com.serendisand.serendichat.config.ChatConfig config, String text) {
         return config.markdownEnabled && PATTERN.matcher(text).find();
     }
 
@@ -59,6 +59,33 @@ public final class MarkdownRenderer {
         }
         if (last < text.length()) {
             out.append(styledText(text.substring(last), baseColor));
+        }
+        return out;
+    }
+
+    /**
+     * 按代码点（而非 UTF-16 char）遍历文本生成 Component。
+     * 用于彩虹渲染等需要逐字符着色的场景，避免拆分 emoji 代理对。
+     */
+    public static MutableComponent renderByCodepoint(String text, ChatFormatting[] palette) {
+        if (text == null || text.isEmpty()) {
+            return Component.empty();
+        }
+        MutableComponent out = Component.empty();
+        int i = 0;
+        int pi = 0;
+        while (i < text.length()) {
+            int cp = text.codePointAt(i);
+            int charCount = Character.charCount(cp);
+            ChatFormatting color = palette == null || palette.length == 0 ? null : palette[pi % palette.length];
+            String chunk = text.substring(i, i + charCount);
+            if (color == null) {
+                out.append(Component.literal(chunk));
+            } else {
+                out.append(Component.literal(chunk).withStyle(color));
+            }
+            i += charCount;
+            pi++;
         }
         return out;
     }

@@ -1,6 +1,9 @@
 package com.serendisand.serendichat;
 
 import com.serendisand.serendichat.chat.ChatFormatter;
+import com.serendisand.serendichat.chat.EmojiReplacer;
+import com.serendisand.serendichat.chat.ChatLogger;
+import com.serendisand.serendichat.chat.PrivateMessageManager;
 import com.serendisand.serendichat.command.SerendiChatCommands;
 import com.serendisand.serendichat.compat.CustomNameCompat;
 import com.serendisand.serendichat.config.ChatConfig;
@@ -31,9 +34,14 @@ public class SerendiChat implements ModInitializer {
         PlayerDataManager data = new PlayerDataManager(config);
         CustomNameCompat customName = CustomNameCompat.detect();
         ChatFormatter formatter = new ChatFormatter(config, data, customName);
+        ChatLogger chatLogger = new ChatLogger(config);
+        PrivateMessageManager pm = new PrivateMessageManager(config, customName);
 
-        new ServerEvents(data, formatter).register();
-        new SerendiChatCommands(data, () -> configManager.load(config)).register();
+        new ServerEvents(config, data, formatter, chatLogger).register();
+        new SerendiChatCommands(data, pm, () -> {
+            configManager.load(config);
+            EmojiReplacer.invalidateCache();
+        }).register();
 
         LOGGER.info("SerendiChat initialized successfully! CustomName API: {}",
                 customName.available() ? "✓ Available" : "✗ Not available");

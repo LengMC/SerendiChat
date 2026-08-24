@@ -42,15 +42,35 @@ public class ConfigManager {
 
     @SuppressWarnings("unchecked")
     private void apply(Map<String, Object> data, ChatConfig config) {
-        config.format = (String) data.getOrDefault("format", config.format);
-        config.adminColor = (Boolean) data.getOrDefault("admin_color", config.adminColor);
-        config.rainbowThreshold = (Integer) data.getOrDefault("rainbow_threshold", config.rainbowThreshold);
-        config.maxStars = (Integer) data.getOrDefault("max_stars", config.maxStars);
-        config.starsPerHour = (Integer) data.getOrDefault("stars_per_hour", config.starsPerHour);
+        // 先重置 emoji 映射（避免热重载时累积）
+        config.emojis = new LinkedHashMap<>();
 
-        config.markdownEnabled = (Boolean) data.getOrDefault("enable_markdown", true);
-        config.emojiEnabled = (Boolean) data.getOrDefault("enable_emoji", true);
-        config.itemDisplayEnabled = (Boolean) data.getOrDefault("enable_item_display", true);
+        config.format = str(data, "format", config.format);
+        config.starBracketEnabled = bool(data, "star_bracket", config.starBracketEnabled);
+        config.nameBracketEnabled = bool(data, "name_bracket", config.nameBracketEnabled);
+
+        config.adminColor = bool(data, "admin_color", config.adminColor);
+        config.rainbowThreshold = integer(data, "rainbow_threshold", config.rainbowThreshold);
+        config.maxStars = integer(data, "max_stars", config.maxStars);
+        config.starsPerHour = integer(data, "stars_per_hour", config.starsPerHour);
+
+        config.markdownEnabled = bool(data, "enable_markdown", true);
+        config.emojiEnabled = bool(data, "enable_emoji", true);
+        config.itemDisplayEnabled = bool(data, "enable_item_display", true);
+
+        config.clickToMsgEnabled = bool(data, "click_to_msg", config.clickToMsgEnabled);
+        config.msgCommandTemplate = str(data, "msg_command_template", config.msgCommandTemplate);
+        config.mentionEnabled = bool(data, "enable_mention", config.mentionEnabled);
+        config.mentionSoundEnabled = bool(data, "mention_sound", config.mentionSoundEnabled);
+        config.urlClickEnabled = bool(data, "url_click_enabled", config.urlClickEnabled);
+
+        config.privateMsgEnabled = bool(data, "enable_private_msg", config.privateMsgEnabled);
+        config.privateMsgFormat = str(data, "private_msg_format", config.privateMsgFormat);
+
+        config.spamCooldownSeconds = integer(data, "spam_cooldown_seconds", config.spamCooldownSeconds);
+
+        config.chatLogEnabled = bool(data, "enable_chat_log", config.chatLogEnabled);
+        config.chatLogFormat = str(data, "chat_log_format", config.chatLogFormat);
 
         Object emojiObj = data.get("emojis");
         if (emojiObj instanceof Map) {
@@ -59,13 +79,30 @@ public class ConfigManager {
             }
         }
 
-        config.starsColor0 = (String) data.getOrDefault("stars_color_0", config.starsColor0);
-        config.starsColor20 = (String) data.getOrDefault("stars_color_20", config.starsColor20);
-        config.starsColor40 = (String) data.getOrDefault("stars_color_40", config.starsColor40);
-        config.starsColor60 = (String) data.getOrDefault("stars_color_60", config.starsColor60);
-        config.starsColor80 = (String) data.getOrDefault("stars_color_80", config.starsColor80);
-        config.starsColor100 = (String) data.getOrDefault("stars_color_100", config.starsColor100);
-        config.starsColorRainbow = (String) data.getOrDefault("stars_color_rainbow", config.starsColorRainbow);
+        config.starsColor0 = str(data, "stars_color_0", config.starsColor0);
+        config.starsColor20 = str(data, "stars_color_20", config.starsColor20);
+        config.starsColor40 = str(data, "stars_color_40", config.starsColor40);
+        config.starsColor60 = str(data, "stars_color_60", config.starsColor60);
+        config.starsColor80 = str(data, "stars_color_80", config.starsColor80);
+        config.starsColor100 = str(data, "stars_color_100", config.starsColor100);
+        config.starsColorRainbow = str(data, "stars_color_rainbow", config.starsColorRainbow);
+    }
+
+    private static String str(Map<String, Object> data, String key, String def) {
+        Object v = data.get(key);
+        return v instanceof String s ? s : def;
+    }
+
+    private static boolean bool(Map<String, Object> data, String key, boolean def) {
+        Object v = data.get(key);
+        return v instanceof Boolean b ? b : def;
+    }
+
+    private static int integer(Map<String, Object> data, String key, int def) {
+        Object v = data.get(key);
+        if (v instanceof Integer i) return i;
+        if (v instanceof Number n) return n.intValue();
+        return def;
     }
 
     private void createDefault() throws java.io.IOException {
@@ -73,37 +110,57 @@ public class ConfigManager {
         String defaultConfig =
                 "# SerendiChat 配置文件 (Minecraft 26.2)\n" +
                 "# 重新加载配置: /serendichat reload\n\n" +
-                "# 聊天格式\n" +
+                "# ----- 聊天格式 -----\n" +
                 "# 可用占位符:\n" +
                 "#   {stars}    - 星数显示\n" +
                 "#   {prefix}   - 称号（前缀）\n" +
                 "#   {nickname} - 昵称\n" +
                 "#   {suffix}   - 后缀\n" +
                 "#   {message}  - 消息内容\n" +
-                "format: \"[{stars}※] <{prefix}{nickname}{suffix}> -> {message}\"\n\n" +
-                "# 管理员是否使用红色聊天\n" +
-                "admin_color: true\n\n" +
-                "# 开启彩虹消息所需的星数阈值\n" +
-                "rainbow_threshold: 120\n\n" +
-                "# 最大星数显示（防止溢出）\n" +
-                "max_stars: 1000\n\n" +
-                "# 在线时长获得星数：每N小时获得1星\n" +
-                "stars_per_hour: 5\n\n" +
-                "# Markdown 渲染: **粗体**, *斜体*, __下划线__, ~~删除线~~, `代码`\n" +
-                "enable_markdown: true\n\n" +
-                "# Emoji 转换（见下方 emojis 映射）\n" +
-                "enable_emoji: true\n\n" +
+                "format: \"[{stars}※] <{prefix} {nickname} {suffix}> -> {message}\"\n" +
+                "star_bracket: true\n" +
+                "name_bracket: true\n\n" +
+                "# ----- 颜色与星数 -----\n" +
+                "admin_color: true\n" +
+                "rainbow_threshold: 120\n" +
+                "max_stars: 1000\n" +
+                "# 在线时长获得星数：每 N 小时获得 1 星（默认 1）\n" +
+                "stars_per_hour: 1\n\n" +
+                "# ----- 富文本 -----\n" +
+                "enable_markdown: true\n" +
+                "enable_emoji: true\n" +
                 "# [item] 物品展示：消息中发送 [item] 时展示主手物品，悬停可查看物品详情\n" +
                 "enable_item_display: true\n\n" +
                 "# 自定义 emoji 映射 (键值都需要用引号包裹，键按长度优先匹配)\n" +
                 "# 默认内置: \"<3\"/\":heart:\"→❤, \":)\"→☺, \":(\"→☹, \":star:\"→★, \":sun:\"→☀, \":moon:\"→☾,\n" +
                 "#          \":check:\"→✔, \":x:\"→✘, \":note:\"→♪, \":scissors:\"→✂, \":skull:\"→☠, \":warning:\"→⚠,\n" +
                 "#          \":sword:\"→⚔, \":bolt:\"→⚡, \":flower:\"→❀, \":snow:\"→❄, \":coffee:\"→☕\n" +
+                "# 原生 emoji（如 😭）按 UTF-16 透传；客户端需有 emoji 字体资源包才能正确显示\n" +
                 "emojis:\n" +
                 "  \":smile:\": \"☺\"\n" +
-                "  \":fire:\": \"🔥\"\n" +
-                "\n" +
-                "# 星数颜色配置 (可用颜色: GRAY, GREEN, GOLD, AQUA, BLUE, RED, LIGHT_PURPLE, RAINBOW)\n" +
+                "  \":fire:\": \"🔥\"\n\n" +
+                "# ----- 交互 -----\n" +
+                "# 点击聊天中玩家名时自动填入私信命令\n" +
+                "click_to_msg: true\n" +
+                "# 私信命令模板，{player} 会被替换为玩家名\n" +
+                "msg_command_template: \"/tell {player} \"\n" +
+                "# @玩家 提及：被 @ 的人会收到提示音，点击 @ 名可发起私信\n" +
+                "enable_mention: true\n" +
+                "mention_sound: true\n" +
+                "# 消息中的 URL 自动变为可点击\n" +
+                "url_click_enabled: true\n\n" +
+                "# ----- 私信 -----\n" +
+                "enable_private_msg: true\n" +
+                "# ACTION: * A 悄悄对 B 说: hi*  CHAT: [私信] A -> B: hi\n" +
+                "private_msg_format: \"ACTION\"\n\n" +
+                "# ----- 反垃圾 -----\n" +
+                "# 同玩家两条消息之间的最少间隔秒数，0 表示不限制\n" +
+                "spam_cooldown_seconds: 0\n\n" +
+                "# ----- 日志 -----\n" +
+                "# 将所有聊天记录写入 config/serendichat_chat.log\n" +
+                "enable_chat_log: false\n" +
+                "chat_log_format: \"PLAIN\"\n\n" +
+                "# ----- 星标颜色 -----\n" +
                 "stars_color_0: \"GRAY\"\n" +
                 "stars_color_20: \"GREEN\"\n" +
                 "stars_color_40: \"GOLD\"\n" +

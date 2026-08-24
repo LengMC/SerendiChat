@@ -2,6 +2,8 @@ package com.serendisand.serendichat.data;
 
 import com.serendisand.serendichat.config.ChatConfig;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,8 @@ public class PlayerDataManager {
     private final Map<String, Boolean> adminColorEnabled = new ConcurrentHashMap<>();
     private final Map<String, Long> playerOnlineTime = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> playerPlayTimeMinutes = new ConcurrentHashMap<>();
+    /** 最近一次发言时间（毫秒），用于反垃圾冷却。 */
+    private final Map<String, Long> lastMessageTime = new ConcurrentHashMap<>();
 
     public PlayerDataManager(ChatConfig config) {
         this.config = config;
@@ -82,6 +86,19 @@ public class PlayerDataManager {
         return hours / config.starsPerHour;
     }
 
+    /** 按 UUID 查询在线奖励星数（仅用于排行榜，不带活跃检查）。 */
+    public int getPlaytimeStarsByUuid(String uuid) {
+        if (config.starsPerHour <= 0) return 0;
+        AtomicInteger minutes = playerPlayTimeMinutes.get(uuid);
+        if (minutes == null) return 0;
+        return (minutes.get() / 60) / config.starsPerHour;
+    }
+
+    /** 当前所有玩家的 (uuid, manualStars) 快照，供排行榜使用。 */
+    public Map<String, Integer> snapshotStars() {
+        return Map.copyOf(playerStars);
+    }
+
     public void setStars(String uuid, int stars) {
         playerStars.put(uuid, stars);
         saveStars();
@@ -99,6 +116,28 @@ public class PlayerDataManager {
     public void setAdminColorEnabled(String uuid, boolean enabled) {
         adminColorEnabled.put(uuid, enabled);
         saveAdminColors();
+    }
+
+    /**
+     * 检查并更新玩家的发言冷却。
+     * 返回 true 表示允许发言；false 表示被冷却拦截并已向玩家发送提示。
+     */
+    public boolean checkCooldown(ServerPlayer player, int cooldownSeconds) {
+        if (cooldownSeconds <= 0) {
+            lastMessageTime.put(player.getStringUUID(), System.currentTimeMillis());
+            return true;
+        }
+        String uuid = player.getStringUUID();
+        long now = System.currentTimeMillis();
+        Long last = lastMessageTime.get(uuid);
+        if (last != null && (now - last) < cooldownSeconds * 1000L) {
+            long wait = (cooldownSeconds * 1000L - (now - last) + 999) / 1000;
+            player.sendSystemMessage(Component.literal("§c发言过快，请等待 " + wait + " 秒")
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        lastMessageTime.put(uuid, now);
+        return true;
     }
 
     public void loadAll() {
