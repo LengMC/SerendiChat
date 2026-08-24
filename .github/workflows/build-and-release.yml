@@ -5,6 +5,11 @@ on:
     branches:
       - master
 
+# 添加权限配置
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
