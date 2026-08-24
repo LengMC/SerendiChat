@@ -134,7 +134,7 @@ public class PrivateMessageManager {
         if (config.clickToMsgEnabled) {
             String target = player.getScoreboardName();
             String command = config.msgCommandTemplate.replace("{player}", target);
-            name.withStyle(style -> style.withClickEvent(
+            name = name.withStyle(style -> style.withClickEvent(
                     new net.minecraft.network.chat.ClickEvent.SuggestCommand(command)));
         }
         return name;

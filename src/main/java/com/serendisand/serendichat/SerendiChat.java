@@ -1,8 +1,8 @@
 package com.serendisand.serendichat;
 
 import com.serendisand.serendichat.chat.ChatFormatter;
-import com.serendisand.serendichat.chat.EmojiReplacer;
 import com.serendisand.serendichat.chat.ChatLogger;
+import com.serendisand.serendichat.chat.EmojiReplacer;
 import com.serendisand.serendichat.chat.PrivateMessageManager;
 import com.serendisand.serendichat.command.SerendiChatCommands;
 import com.serendisand.serendichat.compat.CustomNameCompat;
@@ -21,6 +21,8 @@ public class SerendiChat implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("SerendiChat");
 
+    private ChatLogger chatLogger;
+
     @Override
     public void onInitialize() {
         LOGGER.info("Initializing SerendiChat for Minecraft 26.2");
@@ -34,13 +36,18 @@ public class SerendiChat implements ModInitializer {
         PlayerDataManager data = new PlayerDataManager(config);
         CustomNameCompat customName = CustomNameCompat.detect();
         ChatFormatter formatter = new ChatFormatter(config, data, customName);
-        ChatLogger chatLogger = new ChatLogger(config);
+        chatLogger = new ChatLogger(config);
         PrivateMessageManager pm = new PrivateMessageManager(config, customName);
 
         new ServerEvents(config, data, formatter, chatLogger).register();
         new SerendiChatCommands(data, pm, () -> {
             configManager.load(config);
             EmojiReplacer.invalidateCache();
+            // 重建 logger 以响应 chatLogEnabled 切换
+            if (chatLogger != null) {
+                chatLogger.close();
+            }
+            chatLogger = new ChatLogger(config);
         }).register();
 
         LOGGER.info("SerendiChat initialized successfully! CustomName API: {}",

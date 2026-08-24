@@ -114,7 +114,7 @@ public class SerendiChatCommands {
                                 ctx.getSource().sendSuccess(() ->
                                         Component.literal("§a配置已重新加载！"), false);
                                 return 1;
-                            })))
+                            }))
             );
 
             // ----- 私信命令: /msg /tell /whisper 都注册一份 -----

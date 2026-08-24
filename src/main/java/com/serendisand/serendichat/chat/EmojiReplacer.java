@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 短代码 emoji 替换：":heart:" → ❤ 等。
@@ -39,27 +40,33 @@ public final class EmojiReplacer {
         DEFAULT_EMOJIS.put(":coffee:", "☕");
     }
 
+    /**
+     * 缓存：键为 config.emojis 引用（ChatConfig 字段引用稳定），值为按键长倒序的 key 列表。
+     * 用 ConcurrentHashMap 而不是 WeakHashMap：引用稳定，无需 GC 语义。
+     */
+    private static final Map<Map<String, String>, List<String>> SORTED_KEY_CACHE = new ConcurrentHashMap<>();
+
     private EmojiReplacer() {
     }
 
-    /**
-     * 对输入字符串执行短代码 emoji 替换。
-     * 原生 emoji 字符（如 U+1F62D 😭）按字面量透传。
-     * 每次调用基于 config 缓存一份按键长倒序的列表，热重载时通过 cache() 失效。
-     */
     public static String apply(ChatConfig config, String input) {
         if (!config.emojiEnabled || input.isEmpty()) {
             return input;
         }
-        Map<String, String> merged = merge(config.emojis);
-        List<String> keys = merged.isEmpty() ? Collections.emptyList() : sortedKeys.get(merged);
-        if (keys == null) {
-            keys = sortKeysByLengthDesc(merged);
-            sortedKeys.put(merged, keys);
+        Map<String, String> custom = config.emojis;
+        // 默认键集为空（用户没改过）——直接复用静态表 + 缓存
+        List<String> keys;
+        if (custom == null || custom.isEmpty()) {
+            keys = sortedKeysOf(DEFAULT_EMOJIS);
+        } else {
+            // 自定义键集：构造 merged 视图（不可变，避免 hashCode 漂移）
+            Map<String, String> merged = merge(custom);
+            keys = SORTED_KEY_CACHE.computeIfAbsent(merged, EmojiReplacer::sortKeysByLengthDesc);
         }
         String out = input;
+        Map<String, String> source = (custom == null || custom.isEmpty()) ? DEFAULT_EMOJIS : merge(custom);
         for (String key : keys) {
-            String value = merged.get(key);
+            String value = source.get(key);
             if (value != null && !value.isEmpty()) {
                 out = out.replace(key, value);
             }
@@ -69,18 +76,16 @@ public final class EmojiReplacer {
 
     /** 清空缓存（热重载时调用）。 */
     public static void invalidateCache() {
-        sortedKeys.clear();
+        SORTED_KEY_CACHE.clear();
     }
 
     // ----- 内部 -----
 
-    private static final Map<Map<String, String>, List<String>> sortedKeys =
-            Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    private static List<String> sortedKeysOf(Map<String, String> map) {
+        return SORTED_KEY_CACHE.computeIfAbsent(map, EmojiReplacer::sortKeysByLengthDesc);
+    }
 
     private static Map<String, String> merge(Map<String, String> custom) {
-        if (custom == null || custom.isEmpty()) {
-            return DEFAULT_EMOJIS;
-        }
         Map<String, String> merged = new LinkedHashMap<>(DEFAULT_EMOJIS);
         merged.putAll(custom);
         return merged;

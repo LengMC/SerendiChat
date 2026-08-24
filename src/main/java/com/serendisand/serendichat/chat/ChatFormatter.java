@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -140,15 +141,15 @@ public class ChatFormatter {
             name.append(Component.literal(" ")).append(suffix);
         }
 
-        Style.Builder styleBuilder = Style.EMPTY;
+        Style style = Style.EMPTY;
         if (config.clickToMsgEnabled) {
             String target = player.getScoreboardName();
             String command = config.msgCommandTemplate.replace("{player}", target);
-            styleBuilder = styleBuilder.withClickEvent(new ClickEvent.SuggestCommand(command));
+            style = style.withClickEvent(new ClickEvent.SuggestCommand(command));
         }
-        styleBuilder = styleBuilder.withHoverEvent(new HoverEvent.ShowText(
+        style = style.withHoverEvent(new HoverEvent.ShowText(
                 buildPlayerHover(player, manualStars, playtimeStars)));
-        name.withStyle(styleBuilder);
+        name = name.withStyle(style);
 
         if (!config.nameBracketEnabled) {
             return name;
@@ -279,7 +280,7 @@ public class ChatFormatter {
                     MutableComponent comp = Component.literal("@" + mentionName)
                             .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD);
                     String cmd = f.config.msgCommandTemplate.replace("{player}", mentionTarget.getScoreboardName());
-                    comp.withStyle(style -> style
+                    comp = comp.withStyle(style -> style
                             .withClickEvent(new ClickEvent.SuggestCommand(cmd))
                             .withHoverEvent(new HoverEvent.ShowText(
                                     Component.literal("点击私信 " + mentionName))));
@@ -291,14 +292,10 @@ public class ChatFormatter {
                             .withStyle(ChatFormatting.AQUA, ChatFormatting.UNDERLINED)
                             .withStyle(style -> style
                                     .withClickEvent(new ClickEvent.OpenUrl(
-                                            java.net.URI.create(UrlDetector.normalizeForClick(url)))));
+                                            URI.create(UrlDetector.normalizeForClick(url)))));
                     yield link;
                 }
             };
-        }
-
-        private static Component customNameFor(ChatFormatter f, ServerPlayer player) {
-            return f.customName.getNickname(player);
         }
 
         enum Kind { ITEM, MENTION, URL }
