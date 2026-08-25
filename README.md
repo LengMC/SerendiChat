@@ -3,6 +3,8 @@
 
 > 纯服务端模组（`environment: "server"`），客户端无需安装。
 
+[中文](README.md) | [English](README_EN.md)
+
 ## 特性
 
 ### ⭐ 星数系统

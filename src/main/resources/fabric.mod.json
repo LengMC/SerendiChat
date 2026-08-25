@@ -11,6 +11,9 @@
     "sources": "https://github.com/Serendisand/SerendiChat"
   },
   "license": "MIT",
+  "jars": [
+    { "file": "META-INF/jars/sqlite-jdbc-3.46.1.3-minimal.jar" }
+  ],
   "environment": "server",
   "entrypoints": {
     "main": [

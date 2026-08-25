@@ -19,11 +19,43 @@ java {
 version = project.mod_version
 group = project.maven_group
 
+// sqlite-jdbc 版本：依赖块与下方裁剪任务共用
+def sqlite_version = '3.46.1.3'
+
+// jackson-core 未打包进 mod：仅 DataManager 的 Redis 缓存模块使用，SQLite 路径不会加载；
+// 若日后升级框架后启动报 NoClassDefFoundError: com/fasterxml/...，把对应 include 加回来即可
+
+// 从仓库取原版 sqlite-jdbc，剔除无用平台原生库后重打包（Ant 模式不支持 {} 展开，需逐条排除）
+tasks.register('minimizeSqliteJdbc', Zip) {
+    def sqliteJar = configurations.detachedConfiguration(
+            dependencies.create("org.xerial:sqlite-jdbc:${sqlite_version}")).singleFile
+    from(zipTree(sqliteJar)) {
+        exclude 'org/sqlite/native/Linux-Android/**'
+        exclude 'org/sqlite/native/FreeBSD/**'
+        exclude 'org/sqlite/native/Linux/arm/**'
+        exclude 'org/sqlite/native/Linux/armv6/**'
+        exclude 'org/sqlite/native/Linux/armv7/**'
+        exclude 'org/sqlite/native/Linux/x86/**'
+        exclude 'org/sqlite/native/Linux/ppc64/**'
+        exclude 'org/sqlite/native/Linux/riscv64/**'
+        exclude 'org/sqlite/native/Linux-Musl/x86/**'
+        exclude 'org/sqlite/native/Windows/x86/**'
+        exclude 'org/sqlite/native/Windows/aarch64/**'
+        exclude 'org/sqlite/native/Windows/armv7/**'
+    }
+    archiveFileName = "sqlite-jdbc-${sqlite_version}-minimal.jar"
+    destinationDirectory = layout.buildDirectory.dir('minimized')
+}
+
 repositories {
     mavenCentral()
     maven {
         name = 'Fabric'
         url = 'https://maven.fabricmc.net/'
+    }
+    maven {
+        name = 'JitPack'
+        url = 'https://jitpack.io'
     }
 }
 
@@ -38,8 +70,26 @@ dependencies {
     // bStats 匿名统计（https://bstats.org）；使用平台无关的 bstats-base，
     // 自行提供 Fabric 平台壳（配置 / 调度 / 平台数据）
     implementation "org.bstats:bstats-base:3.2.1"
+    include "org.bstats:bstats-base:3.2.1"
+
+    // Arks DataManager（JitPack）：根坐标 com.github.ArkMillion:DataManager 是 POM 聚合构件，
+    // 实际类在子模块中，需按模块引用；sqlite 模块已传递依赖 core
+    def datamanager_version = 'v1.0.0'
+    implementation "com.github.ArkMillion.DataManager:datamanager-sqlite:${datamanager_version}"
+
+    // 运行时依赖需逐个 include 打包进 mod（include 不传递传递依赖）；
+    // slf4j-api 由 Minecraft 自带，勿重复打包
+    include "com.github.ArkMillion.DataManager:datamanager-core:${datamanager_version}"
+    include "com.github.ArkMillion.DataManager:datamanager-sqlite:${datamanager_version}"
+    include "com.zaxxer:HikariCP:4.0.3"
+
+    // sqlite-jdbc 原版 13.8MB，91% 是全平台原生库。生产包用上方裁剪任务产出的精简版，
+    // 手动嵌入 META-INF/jars 并在 fabric.mod.json 的 jars 中声明（与 Loom include 等效，
+    // 但 Loom 1.17 不接受无模块坐标的本地文件）；开发环境仍走完整原版，不受影响。
+    implementation "org.xerial:sqlite-jdbc:${sqlite_version}"
 }
 
+// jackson-core 已在上方说明：不打包，按需回加
 processResources {
     inputs.property "version", project.version
 
@@ -57,6 +107,10 @@ java {
 }
 
 jar {
+    dependsOn minimizeSqliteJdbc
+    from(minimizeSqliteJdbc.archiveFile) {
+        into 'META-INF/jars'
+    }
     from("LICENSE") {
         rename { "${it}_${project.archives_base_name}" }
     }
