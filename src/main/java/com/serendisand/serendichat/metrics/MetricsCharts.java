@@ -20,8 +20,11 @@ public final class MetricsCharts {
     private MetricsCharts() {}
 
     public static void register() {
-        // 每个 server tick 更新一次玩家数（每 tick 都设同一个 int，开销可忽略）
+        // 每个 server tick 更新一次玩家数（每 tick 都设同一个 int，开销可忽略）；
+        // tick 回调必须在 server 线程写、bStats 线程读，所以走 atomic 变量中转。
+        // 如果 Metrics 未启用（plugin id=0 / 用户关闭）就完全跳过，避免无意义写入。
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (!Metrics.isEnabled()) return;
             Metrics.setPlayerCount(server.getPlayerList().getPlayerCount());
         });
 
@@ -29,10 +32,11 @@ public final class MetricsCharts {
             if (!Metrics.isEnabled()) return;
             var m = Metrics.get();
 
-            // 1. 在线玩家数（时间序列图）
+            // 1. 在线玩家数（时间序列图）；通过 Metrics.getPlayerCount() 跨线程读，
+            //    避免在 bStats 调度线程上直接访问 MinecraftServer。
             m.addCustomChart(new SingleLineChart(
                     "players_online",
-                    () -> server.getPlayerList().getPlayerCount()));
+                    Metrics::getPlayerCount));
 
             // 2. Minecraft 版本分布
             String mcVer = Metrics.mcVersion();

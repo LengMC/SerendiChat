@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * SerendiChat bStats 指标门面。
@@ -29,8 +28,8 @@ public final class Metrics {
     private static volatile MetricsBase instance;
     private static volatile boolean userEnabled;
     private static final AtomicInteger PLAYER_COUNT = new AtomicInteger(0);
-    private static final AtomicReference<String> MC_VERSION = new AtomicReference<>("unknown");
-    private static final AtomicReference<String> LOADER_VERSION = new AtomicReference<>("unknown");
+    private static volatile String mcVersion = "unknown";
+    private static volatile String loaderVersion = "unknown";
 
     private Metrics() {}
 
@@ -59,8 +58,8 @@ public final class Metrics {
             userEnabled = cfg.isEnabled();
 
             // 进程内固定的版本字段，上报时只需读，无需每 tick 更新
-            MC_VERSION.set(versionOf("minecraft"));
-            LOADER_VERSION.set(versionOf("fabricloader"));
+            mcVersion = versionOf("minecraft");
+            loaderVersion = versionOf("fabricloader");
 
             MetricsBase base = new MetricsBase(
                     "fabric",
@@ -69,8 +68,8 @@ public final class Metrics {
                     userEnabled,
                     builder -> {
                         builder.appendField("playerAmount", PLAYER_COUNT.get());
-                        builder.appendField("minecraftVersion", MC_VERSION.get());
-                        builder.appendField("fabricLoaderVersion", LOADER_VERSION.get());
+                        builder.appendField("minecraftVersion", mcVersion);
+                        builder.appendField("fabricLoaderVersion", loaderVersion);
                         builder.appendField("javaVersion", System.getProperty("java.version"));
                         builder.appendField("osName", System.getProperty("os.name"));
                         builder.appendField("osArch", System.getProperty("os.arch"));
@@ -102,20 +101,28 @@ public final class Metrics {
 
     /**
      * 由服务器 tick 回调调用，把当前在线玩家数写入原子变量；
-     * bStats 上报线程会在 appendPlatformDataConsumer 里读取该值。
+     * bStats 上报线程会在 appendPlatformDataConsumer 和自定义图表里读取该值。
      */
     public static void setPlayerCount(int count) {
         PLAYER_COUNT.set(count);
     }
 
+    /**
+     * 上报线程安全地读取最近一次 tick 写入的玩家数；
+     * 避免直接从 bStats 调度线程访问 MinecraftServer 内部状态（数据竞争风险）。
+     */
+    public static int getPlayerCount() {
+        return PLAYER_COUNT.get();
+    }
+
     /** @return 进程内的 Minecraft 版本字符串（如 "26.2"）。 */
     public static String mcVersion() {
-        return MC_VERSION.get();
+        return mcVersion;
     }
 
     /** @return 进程内的 Fabric Loader 版本字符串。 */
     public static String loaderVersion() {
-        return LOADER_VERSION.get();
+        return loaderVersion;
     }
 
     /** @return 底层 bStats MetricsBase；若 plugin id 未配置则返回 {@code null}。 */

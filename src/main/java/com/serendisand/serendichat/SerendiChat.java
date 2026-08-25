@@ -13,6 +13,7 @@ import com.serendisand.serendichat.event.ServerEvents;
 import com.serendisand.serendichat.metrics.Metrics;
 import com.serendisand.serendichat.metrics.MetricsCharts;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,9 @@ public class SerendiChat implements ModInitializer {
             Metrics.init(config.bstatsPluginId, pluginVersion);
             MetricsCharts.register();
         }
+
+        // 关服时关闭 bStats 调度器，避免调度线程在 server thread 已停后还尝试 POST
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> Metrics.shutdown());
 
         PlayerDataManager data = new PlayerDataManager(config);
         CustomNameCompat customName = CustomNameCompat.detect();
