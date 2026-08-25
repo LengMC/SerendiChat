@@ -46,7 +46,7 @@
 - **反垃圾冷却**：限制同一玩家两条消息的最小间隔秒数
 - **管理员红字聊天**：管理员消息默认红色，可按玩家开关
 - **聊天日志**：异步将全部聊天写入 `config/serendichat_chat.log`（PLAIN / JSON 格式），不阻塞主线程
-- **CustomName 集成**：检测到 [Eclipse's Custom Name](https://modrinth.com/mod/custom-name) 时自动使用其 称号/昵称/后缀（反射调用，未安装则回退原版名）；同时建议搭配 LuckPerms
+- **CustomName 集成**：检测到 [Eclipse's Custom Name](https://modrinth.com/mod/fabric-custom-names) 时自动使用其 称号/昵称/后缀（反射调用，未安装则回退原版名）；同时建议搭配 LuckPerms
 
 ## 聊天格式
 
