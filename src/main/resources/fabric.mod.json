@@ -5,6 +5,7 @@
   "name": "SerendiChat",
   "description": "Chat formatting mod with star‑based uptime counter and optional Custom Names/LuckPerms integration.",
   "authors": ["Serendisand"],
+  "icon": "assets/serendichat/icon.png",
   "contact": {
     "homepage": "https://github.com/Serendisand/SerendiChat",
     "sources": "https://github.com/Serendisand/SerendiChat"
