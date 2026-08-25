@@ -80,6 +80,10 @@ public class PlayerDataManager {
         saveAllAsync();
     }
 
+    /**
+     * 每个服务器 tick 调用一次：玩家在线每过一分钟，累计在线时长 +1 分钟。
+     * 每次调用最多只补 1 分钟，避免长时间静默后一次性累加导致的"突然跳星"。
+     */
     public void updatePlayTime(ServerPlayer player) {
         String uuid = player.getStringUUID();
         Long lastUpdate = playerOnlineTime.get(uuid);
@@ -89,16 +93,16 @@ public class PlayerDataManager {
         }
 
         long currentTime = System.currentTimeMillis();
-        long diffMinutes = (currentTime - lastUpdate) / 60000;
-
-        if (diffMinutes >= 1) {
-            AtomicInteger minutes = playerPlayTimeMinutes.get(uuid);
-            if (minutes != null) {
-                minutes.addAndGet((int) diffMinutes);
-            }
-            // 从上次基准点推进整分钟，保留不足 1 分钟的余量，避免活跃玩家时长被系统性少记
-            playerOnlineTime.put(uuid, lastUpdate + diffMinutes * 60000L);
+        if (currentTime - lastUpdate < 60000L) {
+            return;
         }
+
+        AtomicInteger minutes = playerPlayTimeMinutes.get(uuid);
+        if (minutes != null) {
+            minutes.incrementAndGet();
+        }
+        // 以"上次更新 + 1 分钟"为新基准，避免 tick 抖动或多分钟跨越时漏算
+        playerOnlineTime.put(uuid, lastUpdate + 60000L);
     }
 
     public int getManualStars(String uuid) {

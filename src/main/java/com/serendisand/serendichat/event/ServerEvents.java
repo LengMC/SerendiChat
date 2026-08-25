@@ -8,6 +8,7 @@ import com.serendisand.serendichat.chat.PrivateMessageManager;
 import com.serendisand.serendichat.config.ChatConfig;
 import com.serendisand.serendichat.data.PlayerDataManager;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.ChatFormatting;
@@ -72,6 +73,13 @@ public class ServerEvents {
             }
         });
 
+        // 每 tick 给所有在线玩家推进 1 分钟的在线时长（每分钟至多 +1，避免长时静默后跳星）
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                data.updatePlayTime(player);
+            }
+        });
+
         // 取消原生聊天广播，改为广播格式化后的消息
         ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, bound) -> {
             try {
@@ -104,7 +112,6 @@ public class ServerEvents {
                 // 日志记录（纯文本）
                 chatLogger.get().log(sender.getScoreboardName(), rawMessage);
 
-                data.updatePlayTime(sender);
                 return false;
             } catch (Exception e) {
                 SerendiChat.LOGGER.error("Failed to format chat message", e);
