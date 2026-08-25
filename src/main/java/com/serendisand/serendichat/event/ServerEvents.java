@@ -28,7 +28,7 @@ import java.util.function.Supplier;
 public class ServerEvents {
 
     private static final SoundEvent ANVIL_LAND = BuiltInRegistries.SOUND_EVENT.getValue(
-            Identifier.tryParse("minecraft:block.anvil.land"));
+            Identifier.tryParse("minecraft:block.anvil.fall"));
 
     private final ChatConfig config;
     private final PlayerDataManager data;
@@ -141,7 +141,7 @@ public class ServerEvents {
             if (!notified.add(target.getUUID())) continue;
 
             if (config.mentionSoundEnabled && ANVIL_LAND != null) {
-                // 26.x: Player.playSound(SoundEvent, float, float)
+                // 26.2 中铁砧落地音效为 block.anvil.fall（原 block.anvil.land 已重命名）
                 target.playSound(ANVIL_LAND, 0.4f, 1.0f);
             }
 

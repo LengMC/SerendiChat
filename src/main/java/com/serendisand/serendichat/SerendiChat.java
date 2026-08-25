@@ -25,8 +25,15 @@ public class SerendiChat implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("SerendiChat");
 
-    /** bStats plugin id。查看面板：https://bstats.org/plugin/server-implementation/SerendiChat/33629；开关由 config/bstats/config.txt 控制。 */
+    /**
+     * bStats plugin id 与平台名。
+     * 面板: https://bstats.org/plugin/server-implementation/SerendiChat/33629
+     * 平台名必须与 bStats 后台注册时填写的一致——上报 URL 是
+     * {@code https://bstats.org/api/v2/data/<platform>}，平台不对会返回 HTTP 404 "Software not found"。
+     * 开关由 {@code config/bstats/config.txt} 控制（用户可设 {@code enabled=false} 关闭）。
+     */
     private static final int BSTATS_PLUGIN_ID = 33629;
+    private static final String BSTATS_PLATFORM = "server-implementation";
 
     @Override
     public void onInitialize() {
@@ -44,7 +51,7 @@ public class SerendiChat implements ModInitializer {
                 .getModContainer("serendichat")
                 .map(c -> c.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
-        Metrics.init(BSTATS_PLUGIN_ID, pluginVersion);
+        Metrics.init(BSTATS_PLATFORM, BSTATS_PLUGIN_ID, pluginVersion);
         MetricsCharts.register();
 
         // 关服时关闭 bStats 调度器，避免调度线程在 server thread 已停后还尝试 POST

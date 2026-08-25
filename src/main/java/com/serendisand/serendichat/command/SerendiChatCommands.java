@@ -145,13 +145,14 @@ public class SerendiChatCommands {
             );
 
             // ----- 私信命令: /msg /tell /w /whisper 都注册一份 -----
+            // 使用 EntityArgument.player() 让 Brigadier 自动补全在线玩家名（按 Tab 即可看到候选列表）
             for (String cmd : new String[]{"msg", "tell", "whisper", "w"}) {
                 dispatcher.register(Commands.literal(cmd)
-                        .then(Commands.argument("target", StringArgumentType.word())
+                        .then(Commands.argument("target", EntityArgument.player())
                                 .then(Commands.argument("message", StringArgumentType.greedyString())
                                         .executes(ctx -> {
                                             ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                            String target = StringArgumentType.getString(ctx, "target");
+                                            ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
                                             String message = StringArgumentType.getString(ctx, "message");
                                             return pm.send(player, target, message) ? 1 : 0;
                                         }))));

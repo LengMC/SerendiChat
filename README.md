@@ -37,7 +37,7 @@
 
 - 接管原版 `/msg` `/tell` `/w` `/whisper`，新增 `/r` 回复最近联系人
 - 双方各自视角渲染（发送方看到 `你 -> 对方`，接收方看到 `对方 -> 你`）
-- 两种格式可选：`CHAT`（`[你 -> 玩家] 内容`）或 `ACTION`（`* 你 悄悄对 玩家 说: 内容*`）
+- 格式通过 `private_msg_format` 模板自由定制（默认 `[你 -> 玩家] 内容`，可改为 `* 你 悄悄对 玩家 说: 内容*` 等任意形式）
 - 接收方播放经验球提示音
 
 ### 🛡 其他
@@ -49,15 +49,36 @@
 
 ## 聊天格式
 
-```
-[120※] <Prefix Nickname Suffix> -> 消息内容
-  │         │                      │
-  │         │                      └─ 富文本消息（markdown/emoji/[item]/@提及/URL）
-  │         └─ 玩家名块（点击发起私信，悬停显示星数明细）
-  └─ 星标块（分档着色，达到阈值后彩虹）
-```
+公开聊天和私信的格式均通过 YAML 模板字符串配置，模板支持占位符。
 
-方括号均可通过 `star_bracket` / `name_bracket` 开关。
+**公开聊天** (`chat_format`) — 默认 `"[{stars}] <{player}] -> {message}"`：
+
+| 占位符 | 含义 |
+| --- | --- |
+| `{stars}` | 星标文本（数字 + ※） |
+| `{prefix}` | 玩家称号（无则空字符串，间距由模板决定） |
+| `{nickname}` | 玩家昵称 |
+| `{suffix}` | 玩家后缀（无则空字符串） |
+| `{player}` | 合并显示名（prefix + nickname + suffix 自动加空格，带点击私信+悬停星数） |
+| `{message}` | 富文本消息（markdown/emoji/[item]/@提及/URL） |
+
+**私信** (`private_msg_format`) — 默认 `"[{from} -> {to}] {message}"`：
+
+| 占位符 | 含义 |
+| --- | --- |
+| `{from}` / `{to}` | 合并显示名（"你" 视角：本人侧显示"你"） |
+| `{from_prefix}` / `{to_prefix}` | 称号（无则空） |
+| `{from_nickname}` / `{to_nickname}` | 昵称 |
+| `{from_suffix}` / `{to_suffix}` | 后缀（无则空） |
+| `{message}` | 消息正文 |
+
+示例：
+- 公开聊天：`"【{stars}】《{player}》 {message}"`
+- 公开聊天（自定义）：`"⭐{stars} | {prefix}{nickname}{suffix} >> {message}"`
+- 私信 ACTION 风格：`"* {from} 悄悄对 {to} 说: {message}*"`
+- 私信纯昵称：`"<{from_nickname}> -> <{to_nickname}>: {message}"`
+
+> 占位符之外的字符按装饰色（DARK_GRAY）渲染。模板缺少任何一个所需占位符时会回落到默认模板。
 
 ## 命令
 
@@ -86,8 +107,15 @@
 
 ```yaml
 # ----- 聊天格式 -----
-star_bracket: true          # 星标是否加 [] 包裹
-name_bracket: true          # 玩家名是否加 <> 包裹
+# 完整布局由 chat_format 模板定义，可用占位符：
+#   {stars}    星标文本（数字 + ※）
+#   {prefix}   玩家称号（无则空字符串，间距由模板决定）
+#   {nickname} 玩家昵称
+#   {suffix}   玩家后缀（无则空字符串）
+#   {player}   合并名（prefix + nickname + suffix 自动加空格，带点击私信+悬停星数）
+#   {message}  消息本体（emoji / markdown / [item] / @提及 / URL）
+# 占位符之外的字符按装饰色渲染，可随意改成 【】、《》、→ 等。
+chat_format: "[{stars}] <{player}] -> {message}"
 
 # ----- 颜色与星数 -----
 admin_color: true           # 管理员默认红色聊天
@@ -113,7 +141,16 @@ url_click_enabled: true             # URL 可点击
 
 # ----- 私信 -----
 enable_private_msg: true
-private_msg_format: "CHAT"   # CHAT 或 ACTION
+# 私信格式模板，可用占位符：
+#   {from} / {to}                    合并显示名（带 prefix/nickname/suffix 自动空格）
+#   {from_prefix} / {to_prefix}      称号（无则为空）
+#   {from_nickname} / {to_nickname}  昵称
+#   {from_suffix} / {to_suffix}      后缀（无则为空）
+#   {message}                        消息正文
+# 默认 CHAT 风格: [你 -> {to}] {message}
+# ACTION 风格: "* {from} 悄悄对 {to} 说: {message}*"
+# 纯昵称模板: "<{from_nickname}> -> <{to_nickname}>: {message}"
+private_msg_format: "[{from} -> {to}] {message}"
 
 # ----- 反垃圾 -----
 spam_cooldown_seconds: 0    # 最小发言间隔秒数，0 不限制

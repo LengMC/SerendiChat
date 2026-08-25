@@ -9,9 +9,18 @@ import java.util.Map;
 public class ChatConfig {
 
     // ----- 聊天格式 -----
-    /** 完整布局为 [星数※] <称号 昵称 后缀> -> 消息，由 star_bracket/name_bracket 控制包裹 */
-    public boolean starBracketEnabled = true;
-    public boolean nameBracketEnabled = true;
+    /**
+     * 公开聊天格式模板，可用占位符:
+     *   {stars}    星标文本（数字 + ※）
+     *   {prefix}   玩家称号（无则空字符串，间距由模板控制）
+     *   {nickname} 玩家昵称
+     *   {suffix}   玩家后缀（无则空字符串）
+     *   {player}   合并显示名（prefix + nickname + suffix 自动加空格，带点击私信+悬停星数）
+     *   {message}  消息本体（emoji / markdown / [item] / @提及 / URL）
+     * 占位符之外的字符按装饰色 DARK_GRAY 渲染。
+     * 默认模板 "[{stars}] <{player}] -> {message}"。
+     */
+    public String chatFormat = "[{stars}] <{player}] -> {message}";
 
     // ----- 颜色与星数 -----
     /** 管理员是否默认使用红色聊天 */
@@ -45,8 +54,18 @@ public class ChatConfig {
 
     // ----- 私信 -----
     public boolean privateMsgEnabled = true;
-    /** 私信显示风格: CHAT（[你 -> 玩家] 内容）或 ACTION（* 你 悄悄对 玩家 说: 内容*） */
-    public String privateMsgFormat = "CHAT";
+    /**
+     * 私信格式模板，可用占位符:
+     *   {from} / {to}                    合并显示名（带 prefix/nickname/suffix 自动空格）
+     *   {from_prefix} / {to_prefix}      称号（无则空字符串）
+     *   {from_nickname} / {to_nickname}  昵称
+     *   {from_suffix} / {to_suffix}      后缀（无则空字符串）
+     *   {message}                        消息正文
+     * 占位符之外的字符按装饰色 DARK_GRAY 渲染。
+     * 默认模板 "[{from} -> {to}] {message}"（CHAT 风格）。
+     * 想要 ACTION 风格可改为 "* {from} 悄悄对 {to} 说: {message}*"。
+     */
+    public String privateMsgFormat = "[{from} -> {to}] {message}";
 
     // ----- 反垃圾 -----
     /** 同玩家两条消息之间最少间隔秒数，0 表示不限制 */

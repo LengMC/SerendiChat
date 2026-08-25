@@ -15,9 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 私信路由与渲染。
  * 支持 /msg、/tell、/whisper、/r 四种命令。
- * 格式由配置 private_msg_format 决定:
- *   CHAT:   [你 -> 目标] 内容
- *   ACTION: * 你 悄悄对 目标 说: 内容*
+ * 格式由配置 private_msg_format 模板字符串决定，支持 {from} {to} {message} 占位符。
  * 发送方视角左侧显示"你"，接收方视角右侧显示"你"。
  */
 public class PrivateMessageManager {
@@ -43,23 +41,17 @@ public class PrivateMessageManager {
     }
 
     /** 发送私信。返回 true 表示成功；失败时通过 feedback 返回错误信息。 */
-    public boolean send(ServerPlayer from, String targetName, String message) {
+    public boolean send(ServerPlayer from, ServerPlayer target, String message) {
         if (!config.privateMsgEnabled) {
             from.sendSystemMessage(Component.literal("私信功能已禁用").withStyle(ChatFormatting.RED));
             return false;
         }
-        if (targetName == null || targetName.isBlank()) {
+        if (target == null) {
             from.sendSystemMessage(Component.literal("用法: /msg <玩家> <消息>").withStyle(ChatFormatting.RED));
             return false;
         }
         if (message == null || message.isBlank()) {
             from.sendSystemMessage(Component.literal("消息不能为空").withStyle(ChatFormatting.RED));
-            return false;
-        }
-        ServerPlayer target = from.level().getServer().getPlayerList().getPlayerByName(targetName);
-        if (target == null) {
-            from.sendSystemMessage(Component.literal("玩家 " + targetName + " 不在线或不存在")
-                    .withStyle(ChatFormatting.RED));
             return false;
         }
         if (target.getUUID().equals(from.getUUID())) {
@@ -79,6 +71,24 @@ public class PrivateMessageManager {
         return true;
     }
 
+    /**
+     * 兼容旧签名：按名字查找目标玩家。
+     * 用于脚本等非命令路径；命令路径走 ServerPlayer 重载，可享受自动补全。
+     */
+    public boolean send(ServerPlayer from, String targetName, String message) {
+        if (targetName == null || targetName.isBlank()) {
+            from.sendSystemMessage(Component.literal("用法: /msg <玩家> <消息>").withStyle(ChatFormatting.RED));
+            return false;
+        }
+        ServerPlayer target = from.level().getServer().getPlayerList().getPlayerByName(targetName);
+        if (target == null) {
+            from.sendSystemMessage(Component.literal("玩家 " + targetName + " 不在线或不存在")
+                    .withStyle(ChatFormatting.RED));
+            return false;
+        }
+        return send(from, target, message);
+    }
+
     /** /r 回复最近一次私信对象。 */
     public boolean reply(ServerPlayer from, String message) {
         String targetName = lastTarget.get(from.getStringUUID());
@@ -92,45 +102,41 @@ public class PrivateMessageManager {
     /**
      * 构建私信消息本体。
      * fromIsReader=true 表示渲染视角是发送方（左侧显示"你"），否则渲染视角是接收方（右侧显示"你"）。
-     * CHAT 格式: [from -> to] 内容，方括号灰色；
-     * ACTION 格式: * from 悄悄对 to 说: 内容*
+     * 格式由配置 private_msg_format 模板字符串决定，支持的占位符:
+     *   {from} / {to}                  —— 合并显示名（含 prefix + nickname + suffix + 自动空格，点击发起 /msg 回复）
+     *   {from_prefix} / {to_prefix}    —— 称号（无则为空字符串）
+     *   {from_nickname} / {to_nickname}—— 昵称
+     *   {from_suffix} / {to_suffix}    —— 后缀（无则为空字符串）
+     *   {message}                      —— 消息正文
+     * 占位符外的字面量按装饰色 DARK_GRAY 渲染。
+     * 默认模板 "[{from} -> {to}] {message}" 对应 CHAT 风格；想要 ACTION 风格可改为
+     * "* {from} 悄悄对 {to} 说: {message}*"，或纯昵称模板 "<{from_nickname}> -> <{to_nickname}>: {message}"。
      */
     private Component buildMessage(ServerPlayer from, ServerPlayer to, String message, boolean fromIsReader) {
-        MutableComponent left = fromIsReader
-                ? you()
-                : buildName(from);
-        MutableComponent right = fromIsReader
-                ? buildName(to)
-                : you();
+        MutableComponent you = Component.literal("你").withStyle(ChatFormatting.YELLOW);
+        MutableComponent fromCombined = fromIsReader ? you.copy() : buildName(from);
+        MutableComponent toCombined = fromIsReader ? buildName(to) : you.copy();
 
-        if ("action".equalsIgnoreCase(config.privateMsgFormat)) {
-            return Component.empty()
-                    .append(Component.literal("* ").withStyle(ChatFormatting.DARK_GRAY))
-                    .append(left)
-                    .append(Component.literal(" 悄悄对 ").withStyle(ChatFormatting.GRAY))
-                    .append(right)
-                    .append(Component.literal(" 说: ").withStyle(ChatFormatting.GRAY))
-                    .append(Component.literal(message).withStyle(ChatFormatting.WHITE))
-                    .append(Component.literal("*").withStyle(ChatFormatting.DARK_GRAY));
-        }
+        Component fromPrefix = customName.getPrefix(from);
+        Component fromNickname = customName.getNickname(from);
+        Component fromSuffix = customName.getSuffix(from);
+        Component toPrefix = customName.getPrefix(to);
+        Component toNickname = customName.getNickname(to);
+        Component toSuffix = customName.getSuffix(to);
 
-        // CHAT（默认）: [你 -> 目标] 内容
-        MutableComponent bracketOpen = Component.literal("[").withStyle(ChatFormatting.GRAY);
-        MutableComponent bracketClose = Component.literal("]").withStyle(ChatFormatting.GRAY);
-        MutableComponent arrow = Component.literal(" -> ").withStyle(ChatFormatting.DARK_GRAY);
+        MutableComponent messageComp = Component.literal(message).withStyle(ChatFormatting.WHITE);
 
-        return Component.empty()
-                .append(bracketOpen)
-                .append(left)
-                .append(arrow)
-                .append(right)
-                .append(bracketClose)
-                .append(Component.literal(" "))
-                .append(Component.literal(message).withStyle(ChatFormatting.WHITE));
-    }
-
-    private MutableComponent you() {
-        return Component.literal("你").withStyle(ChatFormatting.YELLOW);
+        java.util.Map<String, MutableComponent> parts = new java.util.LinkedHashMap<>();
+        parts.put("{from}", fromCombined);
+        parts.put("{to}", toCombined);
+        parts.put("{from_prefix}", fromPrefix.copy());
+        parts.put("{from_nickname}", fromNickname.copy());
+        parts.put("{from_suffix}", fromSuffix.copy());
+        parts.put("{to_prefix}", toPrefix.copy());
+        parts.put("{to_nickname}", toNickname.copy());
+        parts.put("{to_suffix}", toSuffix.copy());
+        parts.put("{message}", messageComp);
+        return ChatFormatter.applyTemplate(config.privateMsgFormat, parts);
     }
 
     private void playNotification(ServerPlayer target) {

@@ -72,25 +72,111 @@ public class ChatFormatter {
             messageComp = renderRichMessage(player, processed, baseColor, mentions);
         }
 
-        return Component.empty()
-                .append(buildStarBlock(totalStars))
-                .append(Component.literal(" "))
-                .append(buildPlayerBlock(player, manualStars, playtimeStars))
-                .append(Component.literal(" -> ").withStyle(ChatFormatting.DARK_GRAY))
-                .append(messageComp);
+        MutableComponent starsComp = buildStarBlock(totalStars);
+        // 提供多个独立占位符 + 一个合并的 {player}，用户可按需选用
+        Component prefixComp = customName.getPrefix(player);
+        Component nicknameComp = customName.getNickname(player);
+        Component suffixComp = customName.getSuffix(player);
+
+        MutableComponent playerComp = Component.empty();
+        if (!prefixComp.getString().isEmpty()) {
+            playerComp.append(prefixComp).append(Component.literal(" "));
+        }
+        playerComp.append(nicknameComp);
+        if (!suffixComp.getString().isEmpty()) {
+            playerComp.append(Component.literal(" ")).append(suffixComp);
+        }
+        // {player} 仍带点击私信 + 悬停星数明细；prefix/nickname/suffix 不附带（用户可自由排版）
+        // 注意保留 lambda 入参的现有样式（CustomName API 可能带颜色/样式），不能从 EMPTY 起步
+        playerComp = playerComp.withStyle(style -> {
+            Style s = style;
+            if (config.clickToMsgEnabled) {
+                String cmd = config.msgCommandTemplate.replace("{player}", player.getScoreboardName());
+                s = s.withClickEvent(new ClickEvent.SuggestCommand(cmd));
+            }
+            return s.withHoverEvent(new HoverEvent.ShowText(
+                    buildPlayerHover(player, manualStars, playtimeStars)));
+        });
+
+        java.util.Map<String, MutableComponent> parts = new java.util.LinkedHashMap<>();
+        parts.put("{stars}", starsComp);
+        parts.put("{prefix}", prefixComp.copy());
+        parts.put("{nickname}", nicknameComp.copy());
+        parts.put("{suffix}", suffixComp.copy());
+        parts.put("{player}", playerComp);
+        parts.put("{message}", messageComp);
+        return applyTemplate(config.chatFormat, parts);
+    }
+
+    /**
+     * 用占位符模板把多个 Component 拼成完整消息。
+     * 模板外的字面量字符按装饰色 DARK_GRAY 渲染。
+     * parts 为占位符名 → 渲染组件 的映射；模板里出现但 parts 里没有的占位符会被忽略（按字面量渲染）。
+     * 若模板里出现的占位符全部都不在 parts 中（例如拼写错误），回落到默认模板以避免静默坏掉输出。
+     */
+    static MutableComponent applyTemplate(String template, java.util.Map<String, MutableComponent> parts) {
+        // 先扫描一遍：找出模板中真实出现的占位符；只要有至少一个匹配的，就信任模板
+        java.util.Set<String> used = new java.util.LinkedHashSet<>();
+        for (String key : parts.keySet()) {
+            if (template.indexOf(key) >= 0) used.add(key);
+        }
+        String tmpl = used.isEmpty() ? defaultTemplate(parts.keySet()) : template;
+
+        MutableComponent out = Component.empty();
+        int cursor = 0;
+        int len = tmpl.length();
+        while (cursor < len) {
+            int nextPos = -1;
+            String nextKey = null;
+            // 同时出现位置相同时按占位符长度优先（避免 {from} 抢走 {from_prefix} 的匹配）
+            for (String key : used.isEmpty() ? parts.keySet() : used) {
+                int idx = tmpl.indexOf(key, cursor);
+                if (idx < 0) continue;
+                if (nextPos < 0 || idx < nextPos
+                        || (idx == nextPos && key.length() > nextKey.length())) {
+                    nextPos = idx;
+                    nextKey = key;
+                }
+            }
+            if (nextPos < 0) {
+                appendLiteral(out, tmpl, cursor, len);
+                break;
+            }
+            appendLiteral(out, tmpl, cursor, nextPos);
+            out.append(parts.get(nextKey));
+            cursor = nextPos + nextKey.length();
+        }
+        return out;
+    }
+
+    private static String defaultTemplate(java.util.Set<String> keys) {
+        // 兼容占位符集合的默认模板；有 {player} 时直接用合并名，否则用 prefix/nickname/suffix
+        StringBuilder sb = new StringBuilder("[");
+        if (keys.contains("{stars}")) sb.append("{stars}");
+        sb.append("] ");
+        if (keys.contains("{player}")) {
+            sb.append("{player}");
+        } else {
+            if (keys.contains("{prefix}")) sb.append("{prefix} ");
+            if (keys.contains("{nickname}")) sb.append("{nickname}");
+            if (keys.contains("{suffix}")) sb.append(" {suffix}");
+        }
+        sb.append(" -> ");
+        if (keys.contains("{message}")) sb.append("{message}");
+        return sb.toString();
+    }
+
+    /** 把模板里 [from, to) 范围的字面量按装饰色追加到组件；空范围直接跳过。 */
+    private static void appendLiteral(MutableComponent out, String template, int from, int to) {
+        if (to <= from) return;
+        out.append(Component.literal(template.substring(from, to)).withStyle(ChatFormatting.DARK_GRAY));
     }
 
     // ===================== 星标块 =====================
 
+    /** 仅渲染星标文本本身（含 ※ 与分档配色），不再自带括号——括号由模板控制。 */
     private MutableComponent buildStarBlock(int stars) {
-        MutableComponent inner = buildStarInner(stars);
-        if (!config.starBracketEnabled) {
-            return inner;
-        }
-        return Component.empty()
-                .append(Component.literal("[").withStyle(ChatFormatting.DARK_GRAY))
-                .append(inner)
-                .append(Component.literal("]").withStyle(ChatFormatting.DARK_GRAY));
+        return buildStarInner(stars);
     }
 
     private MutableComponent buildStarInner(int stars) {
@@ -124,46 +210,7 @@ public class ChatFormatter {
         }
     }
 
-    // ===================== 玩家名块 =====================
-
-    /**
-     * 构建玩家显示名（含 prefix/nickname/suffix 空格分隔），
-     * 并叠加点击私信 + 悬停信息两个交互事件。
-     */
-    private MutableComponent buildPlayerBlock(ServerPlayer player, int manualStars, int playtimeStars) {
-        Component prefix = customName.getPrefix(player);
-        Component nickname = customName.getNickname(player);
-        Component suffix = customName.getSuffix(player);
-        boolean hasPrefix = !prefix.getString().isEmpty();
-        boolean hasSuffix = !suffix.getString().isEmpty();
-
-        MutableComponent name = Component.empty();
-        if (hasPrefix) {
-            name.append(prefix).append(Component.literal(" "));
-        }
-        name.append(nickname);
-        if (hasSuffix) {
-            name.append(Component.literal(" ")).append(suffix);
-        }
-
-        Style style = Style.EMPTY;
-        if (config.clickToMsgEnabled) {
-            String target = player.getScoreboardName();
-            String command = config.msgCommandTemplate.replace("{player}", target);
-            style = style.withClickEvent(new ClickEvent.SuggestCommand(command));
-        }
-        style = style.withHoverEvent(new HoverEvent.ShowText(
-                buildPlayerHover(player, manualStars, playtimeStars)));
-        name = name.withStyle(style);
-
-        if (!config.nameBracketEnabled) {
-            return name;
-        }
-        return Component.empty()
-                .append(Component.literal("<").withStyle(ChatFormatting.GRAY))
-                .append(name)
-                .append(Component.literal(">").withStyle(ChatFormatting.GRAY));
-    }
+    // ===================== 玩家名辅助 =====================
 
     private Component buildPlayerHover(ServerPlayer player, int manualStars, int playtimeStars) {
         MutableComponent hover = Component.empty();
@@ -225,7 +272,7 @@ public class ChatFormatter {
         }
 
         for (MentionDetector.Mention m : mentions) {
-            segments.add(Segment.mention(m.start(), m.end(), m.target(), m.text()));
+            segments.add(Segment.mention(m.start(), m.end(), m.target()));
         }
 
         if (config.urlClickEnabled) {
@@ -257,28 +304,26 @@ public class ChatFormatter {
         final Kind kind;
         // mention / url 数据
         final ServerPlayer mentionTarget;
-        final String mentionText;
         final String url;
 
-        private Segment(int start, int end, Kind kind, ServerPlayer mentionTarget, String mentionText, String url) {
+        private Segment(int start, int end, Kind kind, ServerPlayer mentionTarget, String url) {
             this.start = start;
             this.end = end;
             this.kind = kind;
             this.mentionTarget = mentionTarget;
-            this.mentionText = mentionText;
             this.url = url;
         }
 
         static Segment item(int s, int e) {
-            return new Segment(s, e, Kind.ITEM, null, null, null);
+            return new Segment(s, e, Kind.ITEM, null, null);
         }
 
-        static Segment mention(int s, int e, ServerPlayer target, String text) {
-            return new Segment(s, e, Kind.MENTION, target, text, null);
+        static Segment mention(int s, int e, ServerPlayer target) {
+            return new Segment(s, e, Kind.MENTION, target, null);
         }
 
         static Segment url(int s, int e, String url) {
-            return new Segment(s, e, Kind.URL, null, null, url);
+            return new Segment(s, e, Kind.URL, null, url);
         }
 
         MutableComponent render(ChatFormatter f, ServerPlayer player, String message, ChatFormatting baseColor) {
@@ -286,13 +331,15 @@ public class ChatFormatter {
                 case ITEM -> ItemDisplayRenderer.render(player,
                         message.substring(start, end), baseColor, f.config.markdownEnabled);
                 case MENTION -> {
-                    MutableComponent comp = Component.literal(mentionText)
+                    // 无论输入是 "ID" 还是 "@ID"，输出都强制统一为 "@ID"（只保留一个 @）
+                    String targetName = mentionTarget.getScoreboardName();
+                    MutableComponent comp = Component.literal("@" + targetName)
                             .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD);
-                    String cmd = f.config.msgCommandTemplate.replace("{player}", mentionTarget.getScoreboardName());
+                    String cmd = f.config.msgCommandTemplate.replace("{player}", targetName);
                     comp = comp.withStyle(style -> style
                             .withClickEvent(new ClickEvent.SuggestCommand(cmd))
                             .withHoverEvent(new HoverEvent.ShowText(
-                                    Component.literal("点击私信 " + mentionTarget.getScoreboardName()))));
+                                    Component.literal("点击私信 " + targetName))));
                     yield comp;
                 }
                 case URL -> {

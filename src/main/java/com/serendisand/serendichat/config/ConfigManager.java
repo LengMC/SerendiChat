@@ -46,8 +46,7 @@ public class ConfigManager {
         // 先重置 emoji 映射（避免热重载时累积）
         config.emojis = new LinkedHashMap<>();
 
-        config.starBracketEnabled = bool(data, "star_bracket", config.starBracketEnabled);
-        config.nameBracketEnabled = bool(data, "name_bracket", config.nameBracketEnabled);
+        config.chatFormat = str(data, "chat_format", config.chatFormat);
 
         config.adminColor = bool(data, "admin_color", config.adminColor);
         config.rainbowThreshold = integer(data, "rainbow_threshold", config.rainbowThreshold);
@@ -111,9 +110,15 @@ public class ConfigManager {
                 "# SerendiChat 配置文件 (Minecraft 26.2)\n" +
                 "# 重新加载配置: /serendichat reload\n\n" +
                 "# ----- 聊天格式 -----\n" +
-                "# 完整布局为 [星数※] <称号 昵称 后缀> -> 消息\n" +
-                "star_bracket: true\n" +
-                "name_bracket: true\n\n" +
+                "# 完整布局由 chat_format 模板定义，可用占位符:\n" +
+                "#   {stars}    星标文本（数字 + ※）\n" +
+                "#   {prefix}   玩家称号（无则为空字符串；用户负责加间距）\n" +
+                "#   {nickname} 玩家昵称\n" +
+                "#   {suffix}   玩家后缀（无则为空字符串）\n" +
+                "#   {player}   合并名（prefix + nickname + suffix 自动加空格，带点击私信+悬停星数）\n" +
+                "#   {message}  消息本体（emoji / markdown / [item] / @提及 / URL）\n" +
+                "# 占位符之外的字符按装饰色渲染。\n" +
+                "chat_format: \"[{stars}] <{player}] -> {message}\"\n\n" +
                 "# ----- 颜色与星数 -----\n" +
                 "admin_color: true\n" +
                 "rainbow_threshold: 120\n" +
@@ -148,8 +153,16 @@ public class ConfigManager {
                 "url_click_enabled: true\n\n" +
                 "# ----- 私信 -----\n" +
                 "enable_private_msg: true\n" +
-                "# CHAT: [你 -> 玩家] 内容   ACTION: * 你 悄悄对 玩家 说: 内容*\n" +
-                "private_msg_format: \"CHAT\"\n\n" +
+                "# 私信格式模板，可用占位符:\n" +
+                "#   {from} / {to}                    合并显示名（带 prefix/nickname/suffix 自动空格）\n" +
+                "#   {from_prefix} / {to_prefix}      称号（无则为空）\n" +
+                "#   {from_nickname} / {to_nickname}  昵称\n" +
+                "#   {from_suffix} / {to_suffix}      后缀（无则为空）\n" +
+                "#   {message}                        消息正文\n" +
+                "# 默认 CHAT 风格: [你 -> {to}] {message}\n" +
+                "# ACTION 风格: \"* {from} 悄悄对 {to} 说: {message}*\"\n" +
+                "# 纯昵称模板: \"<{from_nickname}> -> <{to_nickname}>: {message}\"\n" +
+                "private_msg_format: \"[{from} -> {to}] {message}\"\n\n" +
                 "# ----- 反垃圾 -----\n" +
                 "# 同玩家两条消息之间的最少间隔秒数，0 表示不限制\n" +
                 "spam_cooldown_seconds: 0\n\n" +

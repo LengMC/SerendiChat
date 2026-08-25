@@ -37,10 +37,12 @@ public final class Metrics {
      * 初始化 bStats 指标。仅在 plugin id &gt; 0 时实际生效；否则静默跳过。
      * 用户可在 {@code config/bstats/config.txt} 中关闭（{@code enabled=false}）。
      *
+     * @param platform bStats 后台注册时填写的平台名（拼到上报 URL {@code /api/v2/data/<platform>}，
+     *                 必须与后台一致，否则会返回 HTTP 404 "Software not found"）
      * @param pluginId 在 https://bstats.org/what-is-my-plugin-id 处获得的 plugin id
      * @param pluginVersion 当前 mod 版本，用于上报
      */
-    public static void init(int pluginId, String pluginVersion) {
+    public static void init(String platform, int pluginId, String pluginVersion) {
         if (pluginId <= 0) {
             LOGGER.info("bStats plugin id 未配置（=0），跳过指标初始化");
             return;
@@ -62,7 +64,7 @@ public final class Metrics {
             loaderVersion = versionOf("fabricloader");
 
             MetricsBase base = new MetricsBase(
-                    "fabric",
+                    platform,
                     cfg.getServerUUID(),
                     pluginId,
                     userEnabled,
