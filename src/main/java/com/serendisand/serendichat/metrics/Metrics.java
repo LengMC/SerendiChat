@@ -1,32 +1,47 @@
 package com.serendisand.serendichat.metrics;
 
+import net.fabricmc.loader.api.FabricLoader;
+import org.bstats.MetricsBase;
+import org.bstats.config.MetricsConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * SerendiChat bStats 指标门面。
  *
- * <p>底层委托给官方 {@code org.bstats.fabric.Metrics}（bstats-fabric 3.x），
- * 本类仅持有单例并提供安全的初始化与自定义图表注册入口，
- * 避免业务代码直接依赖 bStats 包路径。
+ * <p>底层委托给官方 <code>org.bstats.MetricsBase</code>（bstats-base 3.x）——
+ * bstats-fabric 这个 artifact 不存在于 Maven Central（bstats-metrics 仓库也未提供
+ * fabric 模块），所以这里直接使用平台无关的核心库，并自行实现 Fabric 端的
+ * 配置 / 调度 / 平台数据三件事。
  *
- * <p>使用流程：在 {@code onInitialize} 中调用一次 {@link #init(int)}；
- * 之后通过 {@link #get()} 获取底层实例以注册自定义图表。
- * 同一进程内重复初始化会被忽略。
+ * <p>调度策略：MetricsBase 自带 {@code ScheduledThreadPoolExecutor}，所以
+ * {@code submitTaskConsumer} 传 {@code null}，让上报走默认线程池；
+ * 唯一需要从服务器线程读取的字段（playerAmount）通过 {@link #setPlayerCount(int)}
+ * 写入原子变量，上报线程从原子变量读取，避开跨线程直接访问 MinecraftServer。
  */
 public final class Metrics {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("SerendiChat");
-    private static volatile org.bstats.fabric.Metrics instance;
+    private static volatile MetricsBase instance;
+    private static volatile boolean userEnabled;
+    private static final AtomicInteger PLAYER_COUNT = new AtomicInteger(0);
+    private static final AtomicReference<String> MC_VERSION = new AtomicReference<>("unknown");
+    private static final AtomicReference<String> LOADER_VERSION = new AtomicReference<>("unknown");
 
     private Metrics() {}
 
     /**
      * 初始化 bStats 指标。仅在 plugin id &gt; 0 时实际生效；否则静默跳过。
+     * 用户可在 {@code config/bstats/config.txt} 中关闭（{@code enabled=false}）。
      *
      * @param pluginId 在 https://bstats.org/what-is-my-plugin-id 处获得的 plugin id
+     * @param pluginVersion 当前 mod 版本，用于上报
      */
-    public static void init(int pluginId) {
+    public static void init(int pluginId, String pluginVersion) {
         if (pluginId <= 0) {
             LOGGER.info("bStats plugin id 未配置（=0），跳过指标初始化");
             return;
@@ -35,20 +50,96 @@ public final class Metrics {
             return;
         }
         try {
-            instance = new org.bstats.fabric.Metrics(pluginId);
-            LOGGER.info("bStats 指标已初始化（plugin id: {}）", pluginId);
+            File bStatsDir = new File(
+                    FabricLoader.getInstance().getConfigDir().toFile(), "bstats");
+            bStatsDir.mkdirs();
+            File configFile = new File(bStatsDir, "config.txt");
+
+            MetricsConfig cfg = new MetricsConfig(configFile, true);
+            userEnabled = cfg.isEnabled();
+
+            // 进程内固定的版本字段，上报时只需读，无需每 tick 更新
+            MC_VERSION.set(versionOf("minecraft"));
+            LOADER_VERSION.set(versionOf("fabricloader"));
+
+            MetricsBase base = new MetricsBase(
+                    "fabric",
+                    cfg.getServerUUID(),
+                    pluginId,
+                    userEnabled,
+                    builder -> {
+                        builder.appendField("playerAmount", PLAYER_COUNT.get());
+                        builder.appendField("minecraftVersion", MC_VERSION.get());
+                        builder.appendField("fabricLoaderVersion", LOADER_VERSION.get());
+                        builder.appendField("javaVersion", System.getProperty("java.version"));
+                        builder.appendField("osName", System.getProperty("os.name"));
+                        builder.appendField("osArch", System.getProperty("os.arch"));
+                        builder.appendField("osVersion", System.getProperty("os.version"));
+                        builder.appendField("coreCount", Runtime.getRuntime().availableProcessors());
+                    },
+                    builder -> builder.appendField("pluginVersion", pluginVersion),
+                    null,                                       // submitTaskConsumer: 用默认线程池
+                    () -> true,                                 // checkServiceEnabledSupplier
+                    (msg, err) -> {
+                        if (cfg.isLogErrorsEnabled()) LOGGER.warn(msg, err);
+                    },
+                    msg -> {
+                        if (cfg.isLogSentDataEnabled() || cfg.isLogResponseStatusTextEnabled()) {
+                            LOGGER.info(msg);
+                        }
+                    },
+                    cfg.isLogErrorsEnabled(),
+                    cfg.isLogSentDataEnabled(),
+                    cfg.isLogResponseStatusTextEnabled(),
+                    true                                        // skipRelocateCheck: 直接用上游 jar
+            );
+            instance = base;
+            LOGGER.info("bStats 指标初始化完成（plugin id: {}, enabled: {}）", pluginId, userEnabled);
         } catch (Throwable t) {
             LOGGER.warn("bStats 指标初始化失败", t);
         }
     }
 
-    /** @return 底层 bStats Metrics 实例；若未启用则返回 {@code null}。 */
-    public static org.bstats.fabric.Metrics get() {
+    /**
+     * 由服务器 tick 回调调用，把当前在线玩家数写入原子变量；
+     * bStats 上报线程会在 appendPlatformDataConsumer 里读取该值。
+     */
+    public static void setPlayerCount(int count) {
+        PLAYER_COUNT.set(count);
+    }
+
+    /** @return 进程内的 Minecraft 版本字符串（如 "26.2"）。 */
+    public static String mcVersion() {
+        return MC_VERSION.get();
+    }
+
+    /** @return 进程内的 Fabric Loader 版本字符串。 */
+    public static String loaderVersion() {
+        return LOADER_VERSION.get();
+    }
+
+    /** @return 底层 bStats MetricsBase；若 plugin id 未配置则返回 {@code null}。 */
+    public static MetricsBase get() {
         return instance;
     }
 
-    /** @return 是否已经成功初始化。 */
+    /** @return 用户是否启用了 bStats 且底层已成功初始化。 */
     public static boolean isEnabled() {
-        return instance != null;
+        return userEnabled && instance != null;
+    }
+
+    /** 关闭底层调度器。 */
+    public static void shutdown() {
+        if (instance != null) {
+            instance.shutdown();
+            instance = null;
+        }
+    }
+
+    private static String versionOf(String modId) {
+        return FabricLoader.getInstance()
+                .getModContainer(modId)
+                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
     }
 }

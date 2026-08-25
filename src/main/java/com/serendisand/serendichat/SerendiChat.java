@@ -11,6 +11,7 @@ import com.serendisand.serendichat.config.ConfigManager;
 import com.serendisand.serendichat.data.PlayerDataManager;
 import com.serendisand.serendichat.event.ServerEvents;
 import com.serendisand.serendichat.metrics.Metrics;
+import com.serendisand.serendichat.metrics.MetricsCharts;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
@@ -35,7 +36,12 @@ public class SerendiChat implements ModInitializer {
 
         // bStats 匿名指标（需在 bstats.org 注册并填 plugin_id 后才会真正上报）
         if (config.bstatsEnabled) {
-            Metrics.init(config.bstatsPluginId);
+            String pluginVersion = FabricLoader.getInstance()
+                    .getModContainer("serendichat")
+                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                    .orElse("unknown");
+            Metrics.init(config.bstatsPluginId, pluginVersion);
+            MetricsCharts.register();
         }
 
         PlayerDataManager data = new PlayerDataManager(config);

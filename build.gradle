@@ -35,8 +35,9 @@ dependencies {
     include "org.yaml:snakeyaml:2.2"
     implementation "org.yaml:snakeyaml:2.2"
 
-    // bStats 匿名统计（https://bstats.org）
-    implementation "org.bstats:bstats-fabric:3.2.1"
+    // bStats 匿名统计（https://bstats.org）；使用平台无关的 bstats-base，
+    // 自行提供 Fabric 平台壳（配置 / 调度 / 平台数据）
+    implementation "org.bstats:bstats-base:3.2.1"
 }
 
 processResources {
