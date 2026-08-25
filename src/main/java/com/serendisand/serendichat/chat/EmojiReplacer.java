@@ -55,16 +55,17 @@ public final class EmojiReplacer {
         }
         Map<String, String> custom = config.emojis;
         // 默认键集为空（用户没改过）——直接复用静态表 + 缓存
+        Map<String, String> source;
         List<String> keys;
         if (custom == null || custom.isEmpty()) {
+            source = DEFAULT_EMOJIS;
             keys = sortedKeysOf(DEFAULT_EMOJIS);
         } else {
-            // 自定义键集：构造 merged 视图（不可变，避免 hashCode 漂移）
-            Map<String, String> merged = merge(custom);
-            keys = SORTED_KEY_CACHE.computeIfAbsent(merged, EmojiReplacer::sortKeysByLengthDesc);
+            // 自定义键集：合并视图只构建一次（不可变引用，hashCode 稳定可作缓存键）
+            source = merge(custom);
+            keys = SORTED_KEY_CACHE.computeIfAbsent(source, EmojiReplacer::sortKeysByLengthDesc);
         }
         String out = input;
-        Map<String, String> source = (custom == null || custom.isEmpty()) ? DEFAULT_EMOJIS : merge(custom);
         for (String key : keys) {
             String value = source.get(key);
             if (value != null && !value.isEmpty()) {

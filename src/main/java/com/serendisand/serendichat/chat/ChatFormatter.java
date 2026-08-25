@@ -48,9 +48,14 @@ public class ChatFormatter {
 
         String processed = EmojiReplacer.apply(config, message);
 
+        // 提及只查一次，富文本判断与分段渲染共用结果
+        List<MentionDetector.Mention> mentions = config.mentionEnabled
+                ? MentionDetector.find(player.level().getServer(), processed)
+                : List.<MentionDetector.Mention>of();
+
         boolean hasRichContent = MarkdownRenderer.contains(config, processed)
                 || (config.itemDisplayEnabled && processed.contains(ItemDisplayRenderer.TAG))
-                || hasMentions(player, processed)
+                || !mentions.isEmpty()
                 || hasUrls(processed);
 
         boolean useAdminColor = data.isAdminColorEnabled(uuid, config.adminColor)
@@ -64,7 +69,7 @@ public class ChatFormatter {
             messageComp = MarkdownRenderer.renderByCodepoint(processed, RAINBOW);
         } else {
             ChatFormatting baseColor = useAdminColor ? ChatFormatting.RED : ChatFormatting.WHITE;
-            messageComp = renderRichMessage(player, processed, baseColor);
+            messageComp = renderRichMessage(player, processed, baseColor, mentions);
         }
 
         return Component.empty()
@@ -173,11 +178,6 @@ public class ChatFormatter {
 
     // ===================== 富文本消息 =====================
 
-    private boolean hasMentions(ServerPlayer player, String text) {
-        return config.mentionEnabled
-                && !MentionDetector.find(player.level().getServer(), text).isEmpty();
-    }
-
     private boolean hasUrls(String text) {
         return config.urlClickEnabled && !UrlDetector.find(text).isEmpty();
     }
@@ -186,8 +186,9 @@ public class ChatFormatter {
      * 富文本渲染：mention / url / [item] / markdown 全部按位置切片渲染，
      * 切片按出现位置排序、依次输出。
      */
-    private MutableComponent renderRichMessage(ServerPlayer player, String message, ChatFormatting baseColor) {
-        List<Segment> segments = collectSegments(player, message);
+    private MutableComponent renderRichMessage(ServerPlayer player, String message, ChatFormatting baseColor,
+                                               List<MentionDetector.Mention> mentions) {
+        List<Segment> segments = collectSegments(player, message, mentions);
 
         if (segments.isEmpty()) {
             return ItemDisplayRenderer.render(player, message, baseColor, config.markdownEnabled);
@@ -201,7 +202,7 @@ public class ChatFormatter {
                         message.substring(cursor, seg.start), baseColor, config.markdownEnabled));
             }
             out.append(seg.render(this, player, message, baseColor));
-            cursor = seg.end;
+            cursor = Math.max(cursor, seg.end);
         }
         if (cursor < message.length()) {
             out.append(ItemDisplayRenderer.render(player,
@@ -210,7 +211,8 @@ public class ChatFormatter {
         return out;
     }
 
-    private List<Segment> collectSegments(ServerPlayer player, String message) {
+    private List<Segment> collectSegments(ServerPlayer player, String message,
+                                          List<MentionDetector.Mention> mentions) {
         List<Segment> segments = new ArrayList<>();
 
         if (config.itemDisplayEnabled) {
@@ -222,10 +224,8 @@ public class ChatFormatter {
             }
         }
 
-        if (config.mentionEnabled) {
-            for (MentionDetector.Mention m : MentionDetector.find(player.level().getServer(), message)) {
-                segments.add(Segment.mention(m.start(), m.end(), m.target(), m.text()));
-            }
+        for (MentionDetector.Mention m : mentions) {
+            segments.add(Segment.mention(m.start(), m.end(), m.target(), m.text()));
         }
 
         if (config.urlClickEnabled) {
@@ -236,7 +236,16 @@ public class ChatFormatter {
 
         // 按 start 升序；同位置时优先长度大的（更具体的匹配）
         segments.sort(Comparator.<Segment>comparingInt(s -> s.start).thenComparingInt(s -> -(s.end - s.start)));
-        return segments;
+        // 去重叠：不同检测器的区间可能交叠（如玩家名叫 "Item" 会命中 "[item]"），保留更早/更长的
+        List<Segment> dedup = new ArrayList<>(segments.size());
+        int lastEnd = -1;
+        for (Segment s : segments) {
+            if (s.start >= lastEnd) {
+                dedup.add(s);
+                lastEnd = s.end;
+            }
+        }
+        return dedup;
     }
 
     // ===================== 段渲染 =====================

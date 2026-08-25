@@ -6,6 +6,9 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -15,6 +18,9 @@ import java.util.regex.Pattern;
  * 名字前后不能紧跟字母/数字/下划线，避免误匹配更长的单词或邮箱。
  */
 public final class MentionDetector {
+
+    /** 每个玩家名的正则只编译一次（名字不可变）；改名玩家留下的少量陈旧条目可忽略。 */
+    private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
     private MentionDetector() {
     }
@@ -30,10 +36,7 @@ public final class MentionDetector {
                 continue;
             }
             // @ 可有可无；名字按字面量匹配并忽略大小写；边界检查防止匹配进更长单词
-            Pattern p = Pattern.compile(
-                    "(?<![A-Za-z0-9_])@?" + Pattern.quote(name) + "(?![A-Za-z0-9_])",
-                    Pattern.CASE_INSENSITIVE);
-            Matcher m = p.matcher(message);
+            Matcher m = patternFor(name).matcher(message);
             while (m.find()) {
                 out.add(new Mention(m.start(), m.end(), m.group(), target));
             }
@@ -50,6 +53,12 @@ public final class MentionDetector {
             }
         }
         return dedup;
+    }
+
+    private static Pattern patternFor(String name) {
+        return PATTERN_CACHE.computeIfAbsent(name.toLowerCase(Locale.ROOT), n ->
+                Pattern.compile("(?<![A-Za-z0-9_])@?" + Pattern.quote(name) + "(?![A-Za-z0-9_])",
+                        Pattern.CASE_INSENSITIVE));
     }
 
     /** start/end 为消息中的位置；text 为实际命中的文本（可能带 @）；target 为被提及的在线玩家。 */

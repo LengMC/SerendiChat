@@ -136,7 +136,7 @@ stars_color_100: "RED"
 
 1. 安装 [Fabric Loader](https://fabricmc.net/use/server/) ≥ 0.19.3
 2. 下载 [Fabric API](https://modrinth.com/mod/fabric-api) ≥ 0.158.0 放入 `mods/`
-3. 从 [Releases](https://github.com/Serendisand/SerendiChat/releases) 下载 SerendiChat jar 放入服务器 `mods/` 目录
+3. 从 [Releases](https://github.com/LengMC/SerendiChat/releases) 下载 SerendiChat jar 放入服务器 `mods/` 目录
 4. （可选）安装 Eclipse's Custom Name / LuckPerms 以获得称号昵称支持
 5. 启动服务器，配置文件生成于 `config/serendichat.yml`
 

@@ -46,7 +46,6 @@ public class ConfigManager {
         // 先重置 emoji 映射（避免热重载时累积）
         config.emojis = new LinkedHashMap<>();
 
-        config.format = str(data, "format", config.format);
         config.starBracketEnabled = bool(data, "star_bracket", config.starBracketEnabled);
         config.nameBracketEnabled = bool(data, "name_bracket", config.nameBracketEnabled);
 
@@ -54,6 +53,7 @@ public class ConfigManager {
         config.rainbowThreshold = integer(data, "rainbow_threshold", config.rainbowThreshold);
         config.maxStars = integer(data, "max_stars", config.maxStars);
         config.starsPerHour = integer(data, "stars_per_hour", config.starsPerHour);
+        config.nameCacheMaxSize = integer(data, "name_cache_max_size", config.nameCacheMaxSize);
 
         config.markdownEnabled = bool(data, "enable_markdown", true);
         config.emojiEnabled = bool(data, "enable_emoji", true);
@@ -86,7 +86,6 @@ public class ConfigManager {
         config.starsColor60 = str(data, "stars_color_60", config.starsColor60);
         config.starsColor80 = str(data, "stars_color_80", config.starsColor80);
         config.starsColor100 = str(data, "stars_color_100", config.starsColor100);
-        config.starsColorRainbow = str(data, "stars_color_rainbow", config.starsColorRainbow);
     }
 
     private static String str(Map<String, Object> data, String key, String def) {
@@ -112,13 +111,7 @@ public class ConfigManager {
                 "# SerendiChat 配置文件 (Minecraft 26.2)\n" +
                 "# 重新加载配置: /serendichat reload\n\n" +
                 "# ----- 聊天格式 -----\n" +
-                "# 可用占位符:\n" +
-                "#   {stars}    - 星数显示\n" +
-                "#   {prefix}   - 称号（前缀）\n" +
-                "#   {nickname} - 昵称\n" +
-                "#   {suffix}   - 后缀\n" +
-                "#   {message}  - 消息内容\n" +
-                "format: \"[{stars}※] <{prefix} {nickname} {suffix}> -> {message}\"\n" +
+                "# 完整布局为 [星数※] <称号 昵称 后缀> -> 消息\n" +
                 "star_bracket: true\n" +
                 "name_bracket: true\n\n" +
                 "# ----- 颜色与星数 -----\n" +
@@ -126,7 +119,9 @@ public class ConfigManager {
                 "rainbow_threshold: 120\n" +
                 "max_stars: 1000\n" +
                 "# 在线时长获得星数：每 N 小时获得 1 星（默认 1）\n" +
-                "stars_per_hour: 1\n\n" +
+                "stars_per_hour: 1\n" +
+                "# 排行榜离线玩家名缓存上限（LRU，超出淘汰最久未使用的）\n" +
+                "name_cache_max_size: 10000\n\n" +
                 "# ----- 富文本 -----\n" +
                 "enable_markdown: true\n" +
                 "enable_emoji: true\n" +
@@ -168,8 +163,7 @@ public class ConfigManager {
                 "stars_color_40: \"GOLD\"\n" +
                 "stars_color_60: \"AQUA\"\n" +
                 "stars_color_80: \"BLUE\"\n" +
-                "stars_color_100: \"RED\"\n" +
-                "stars_color_rainbow: \"RAINBOW\"\n";
+                "stars_color_100: \"RED\"\n";
         Files.writeString(configFile, defaultConfig);
         LOGGER.info("Default configuration created: {}", configFile);
     }

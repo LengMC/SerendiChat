@@ -22,6 +22,10 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class PrivateMessageManager {
 
+    /** 接收方提示音（常量提升，避免每条私信查一次注册表）。 */
+    private static final SoundEvent XP_PICKUP = BuiltInRegistries.SOUND_EVENT.getValue(
+            net.minecraft.resources.Identifier.tryParse("minecraft:entity.experience_orb.pickup"));
+
     /** 记录每个玩家最近一次发送/接收私信的对象，用于 /r 回复。 */
     private final Map<String, String> lastTarget = new ConcurrentHashMap<>();
 
@@ -33,28 +37,33 @@ public class PrivateMessageManager {
         this.customName = customName;
     }
 
+    /** 玩家断线时清理回复目标记录，避免 Map 无限增长。 */
+    public void onDisconnect(ServerPlayer player) {
+        lastTarget.remove(player.getStringUUID());
+    }
+
     /** 发送私信。返回 true 表示成功；失败时通过 feedback 返回错误信息。 */
     public boolean send(ServerPlayer from, String targetName, String message) {
         if (!config.privateMsgEnabled) {
-            from.sendSystemMessage(Component.literal("§c私信功能已禁用").withStyle(ChatFormatting.RED));
+            from.sendSystemMessage(Component.literal("私信功能已禁用").withStyle(ChatFormatting.RED));
             return false;
         }
         if (targetName == null || targetName.isBlank()) {
-            from.sendSystemMessage(Component.literal("§c用法: /msg <玩家> <消息>").withStyle(ChatFormatting.RED));
+            from.sendSystemMessage(Component.literal("用法: /msg <玩家> <消息>").withStyle(ChatFormatting.RED));
             return false;
         }
         if (message == null || message.isBlank()) {
-            from.sendSystemMessage(Component.literal("§c消息不能为空").withStyle(ChatFormatting.RED));
+            from.sendSystemMessage(Component.literal("消息不能为空").withStyle(ChatFormatting.RED));
             return false;
         }
         ServerPlayer target = from.level().getServer().getPlayerList().getPlayerByName(targetName);
         if (target == null) {
-            from.sendSystemMessage(Component.literal("§c玩家 " + targetName + " 不在线或不存在")
+            from.sendSystemMessage(Component.literal("玩家 " + targetName + " 不在线或不存在")
                     .withStyle(ChatFormatting.RED));
             return false;
         }
         if (target.getUUID().equals(from.getUUID())) {
-            from.sendSystemMessage(Component.literal("§c你不能给自己发私信").withStyle(ChatFormatting.RED));
+            from.sendSystemMessage(Component.literal("你不能给自己发私信").withStyle(ChatFormatting.RED));
             return false;
         }
 
@@ -74,7 +83,7 @@ public class PrivateMessageManager {
     public boolean reply(ServerPlayer from, String message) {
         String targetName = lastTarget.get(from.getStringUUID());
         if (targetName == null) {
-            from.sendSystemMessage(Component.literal("§c没有人可以回复").withStyle(ChatFormatting.RED));
+            from.sendSystemMessage(Component.literal("没有人可以回复").withStyle(ChatFormatting.RED));
             return false;
         }
         return send(from, targetName, message);
@@ -125,12 +134,9 @@ public class PrivateMessageManager {
     }
 
     private void playNotification(ServerPlayer target) {
-        // 26.x: 通过注册表查找 SoundEvent，避免直接依赖具体常量名（跨版本稳定性更好）
-        SoundEvent event = BuiltInRegistries.SOUND_EVENT.getValue(
-                net.minecraft.resources.Identifier.tryParse("minecraft:entity.experience_orb.pickup"));
-        if (event != null) {
+        if (XP_PICKUP != null) {
             // 26.x 中 Player.playSound(SoundEvent, float, float) 是唯一带音量音调的签名
-            target.playSound(event, 0.6f, 1.4f);
+            target.playSound(XP_PICKUP, 0.6f, 1.4f);
         }
     }
 

@@ -8,12 +8,20 @@ import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PlayerDataManager {
@@ -32,8 +40,23 @@ public class PlayerDataManager {
     private final Map<String, AtomicInteger> playerPlayTimeMinutes = new ConcurrentHashMap<>();
     /** 最近一次发言时间（毫秒），用于反垃圾冷却。 */
     private final Map<String, Long> lastMessageTime = new ConcurrentHashMap<>();
-    /** UUID -> 最后使用的玩家名，用于排行榜等场景显示离线玩家。 */
-    private final Map<String, String> playerNames = new ConcurrentHashMap<>();
+    /** UUID -> 最后使用的玩家名，用于排行榜等场景显示离线玩家。
+     * 纯派生缓存（可由玩家重新上线再生），使用访问序 LRU 限制内存占用；
+     * 上限由配置 name_cache_max_size 控制（最小 100），支持热重载。 */
+    private final Map<String, String> playerNames = Collections.synchronizedMap(
+            new LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                    return size() > Math.max(100, config.nameCacheMaxSize);
+                }
+            });
+
+    /** 磁盘写入统一走这个单线程池：主线程只做内存快照，IO 不阻塞游戏循环。 */
+    private final ExecutorService savePool = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "SerendiChat-DataSave");
+        t.setDaemon(true);
+        return t;
+    });
 
     public PlayerDataManager(ChatConfig config) {
         this.config = config;
@@ -46,8 +69,7 @@ public class PlayerDataManager {
 
     public void onJoin(ServerPlayer player) {
         String uuid = player.getStringUUID();
-        playerStars.putIfAbsent(uuid, 0);
-        adminColorEnabled.putIfAbsent(uuid, config.adminColor);
+        // 星数与管理员颜色不写入默认值：读取时已有缺省逻辑，避免把默认值固化进存档
         playerOnlineTime.putIfAbsent(uuid, System.currentTimeMillis());
         playerPlayTimeMinutes.putIfAbsent(uuid, new AtomicInteger(0));
         playerNames.put(uuid, player.getScoreboardName());
@@ -55,7 +77,7 @@ public class PlayerDataManager {
 
     public void onDisconnect(ServerPlayer player) {
         updatePlayTime(player);
-        saveAll();
+        saveAllAsync();
     }
 
     public void updatePlayTime(ServerPlayer player) {
@@ -74,7 +96,8 @@ public class PlayerDataManager {
             if (minutes != null) {
                 minutes.addAndGet((int) diffMinutes);
             }
-            playerOnlineTime.put(uuid, currentTime);
+            // 从上次基准点推进整分钟，保留不足 1 分钟的余量，避免活跃玩家时长被系统性少记
+            playerOnlineTime.put(uuid, lastUpdate + diffMinutes * 60000L);
         }
     }
 
@@ -155,7 +178,7 @@ public class PlayerDataManager {
         Long last = lastMessageTime.get(uuid);
         if (last != null && (now - last) < cooldownSeconds * 1000L) {
             long wait = (cooldownSeconds * 1000L - (now - last) + 999) / 1000;
-            player.sendSystemMessage(Component.literal("§c发言过快，请等待 " + wait + " 秒")
+            player.sendSystemMessage(Component.literal("发言过快，请等待 " + wait + " 秒")
                     .withStyle(ChatFormatting.RED));
             return false;
         }
@@ -170,26 +193,65 @@ public class PlayerDataManager {
         loadNames();
     }
 
-    public void saveAll() {
+    /** 异步保存全部数据：Properties 快照在当前线程构建，磁盘写入交给后台线程池。 */
+    public void saveAllAsync() {
         saveStars();
         saveAdminColors();
         savePlayTime();
         saveNames();
     }
 
-    private void saveStars() {
+    /** 提交所有挂起的写入并等待落盘（服务器关闭时调用）；之后若有保存请求则退化为同步执行。 */
+    public void shutdownAndSave() {
+        saveAllAsync();
+        savePool.shutdown();
         try {
-            Properties props = new Properties();
-            for (Map.Entry<String, Integer> e : playerStars.entrySet()) {
-                props.setProperty(e.getKey(), String.valueOf(e.getValue()));
+            if (!savePool.awaitTermination(10, TimeUnit.SECONDS)) {
+                LOGGER.warn("Save pool did not finish in time, forcing shutdown");
+                savePool.shutdownNow();
             }
-            Files.createDirectories(starsFile.getParent());
-            try (var out = Files.newOutputStream(starsFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                props.store(out, "SerendiChat player stars");
+        } catch (InterruptedException e) {
+            savePool.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void submitSave(Runnable task) {
+        try {
+            savePool.execute(task);
+        } catch (RejectedExecutionException e) {
+            // 池已关闭（如停服竞态）：退回当前线程同步写，保证数据不丢
+            task.run();
+        }
+    }
+
+    /**
+     * 原子写 Properties 文件：先写临时文件再 move 替换，
+     * 避免进程在覆写中途崩溃导致整个数据文件损坏。
+     */
+    private static void writeAtomically(Path target, Properties props, String comment) {
+        try {
+            Files.createDirectories(target.getParent());
+            Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");
+            try (var out = Files.newOutputStream(tmp, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                props.store(out, comment);
+            }
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
-            LOGGER.error("Failed to save stars data", e);
+            LOGGER.error("Failed to save {}", target.getFileName(), e);
         }
+    }
+
+    private void saveStars() {
+        Properties props = new Properties();
+        for (Map.Entry<String, Integer> e : playerStars.entrySet()) {
+            props.setProperty(e.getKey(), String.valueOf(e.getValue()));
+        }
+        submitSave(() -> writeAtomically(starsFile, props, "SerendiChat player stars"));
     }
 
     private void loadStars() {
@@ -210,18 +272,11 @@ public class PlayerDataManager {
     }
 
     private void saveAdminColors() {
-        try {
-            Properties props = new Properties();
-            for (Map.Entry<String, Boolean> e : adminColorEnabled.entrySet()) {
-                props.setProperty(e.getKey(), String.valueOf(e.getValue()));
-            }
-            Files.createDirectories(adminFile.getParent());
-            try (var out = Files.newOutputStream(adminFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                props.store(out, "SerendiChat admin colors");
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to save admin colors", e);
+        Properties props = new Properties();
+        for (Map.Entry<String, Boolean> e : adminColorEnabled.entrySet()) {
+            props.setProperty(e.getKey(), String.valueOf(e.getValue()));
         }
+        submitSave(() -> writeAtomically(adminFile, props, "SerendiChat admin colors"));
     }
 
     private void loadAdminColors() {
@@ -240,18 +295,11 @@ public class PlayerDataManager {
     }
 
     private void savePlayTime() {
-        try {
-            Properties props = new Properties();
-            for (Map.Entry<String, AtomicInteger> e : playerPlayTimeMinutes.entrySet()) {
-                props.setProperty(e.getKey(), String.valueOf(e.getValue().get()));
-            }
-            Files.createDirectories(playtimeFile.getParent());
-            try (var out = Files.newOutputStream(playtimeFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                props.store(out, "SerendiChat play time");
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to save play time data", e);
+        Properties props = new Properties();
+        for (Map.Entry<String, AtomicInteger> e : playerPlayTimeMinutes.entrySet()) {
+            props.setProperty(e.getKey(), String.valueOf(e.getValue().get()));
         }
+        submitSave(() -> writeAtomically(playtimeFile, props, "SerendiChat play time"));
     }
 
     private void loadPlayTime() {
@@ -272,18 +320,14 @@ public class PlayerDataManager {
     }
 
     private void saveNames() {
-        try {
-            Properties props = new Properties();
+        Properties props = new Properties();
+        // synchronizedMap 的迭代必须在监视器锁内进行，避免并发访问序调整导致 CME
+        synchronized (playerNames) {
             for (Map.Entry<String, String> e : playerNames.entrySet()) {
                 props.setProperty(e.getKey(), e.getValue());
             }
-            Files.createDirectories(namesFile.getParent());
-            try (var out = Files.newOutputStream(namesFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-                props.store(out, "SerendiChat player names");
-            }
-        } catch (Exception e) {
-            LOGGER.error("Failed to save player names", e);
         }
+        submitSave(() -> writeAtomically(namesFile, props, "SerendiChat player names"));
     }
 
     private void loadNames() {

@@ -6,10 +6,12 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.serendisand.serendichat.chat.PrivateMessageManager;
 import com.serendisand.serendichat.data.PlayerDataManager;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 
@@ -54,7 +56,8 @@ public class SerendiChatCommands {
                                                 int stars = IntegerArgumentType.getInteger(ctx, "stars");
                                                 data.setStars(target.getStringUUID(), stars);
                                                 ctx.getSource().sendSuccess(() ->
-                                                        Component.literal("§a已设置 " + target.getName().getString() + " 的星数为 " + stars), false);
+                                                        Component.literal("已设置 " + target.getName().getString() + " 的星数为 " + stars)
+                                                                .withStyle(ChatFormatting.GREEN), false);
                                                 return 1;
                                             }))))
                     .then(Commands.literal("resetstars")
@@ -64,7 +67,8 @@ public class SerendiChatCommands {
                                         ServerPlayer target = EntityArgument.getPlayer(ctx, "target");
                                         data.resetStars(target.getStringUUID());
                                         ctx.getSource().sendSuccess(() ->
-                                                Component.literal("§a已重置 " + target.getName().getString() + " 的星数"), false);
+                                                Component.literal("已重置 " + target.getName().getString() + " 的星数")
+                                                        .withStyle(ChatFormatting.GREEN), false);
                                         return 1;
                                     })))
                     .then(Commands.literal("admincolor")
@@ -75,7 +79,10 @@ public class SerendiChatCommands {
                                         ServerPlayer player = ctx.getSource().getPlayerOrException();
                                         data.setAdminColorEnabled(player.getStringUUID(), enabled);
                                         ctx.getSource().sendSuccess(() ->
-                                                Component.literal("§a管理员红色聊天 " + (enabled ? "§a已启用" : "§c已禁用")), false);
+                                                Component.literal("管理员红色聊天 ")
+                                                        .withStyle(ChatFormatting.GREEN)
+                                                        .append(Component.literal(enabled ? "已启用" : "已禁用")
+                                                                .withStyle(enabled ? ChatFormatting.GREEN : ChatFormatting.RED)), false);
                                         return 1;
                                     })))
                     .then(Commands.literal("stars")
@@ -84,22 +91,29 @@ public class SerendiChatCommands {
                                 int manualStars = data.getManualStars(player.getStringUUID());
                                 int playtimeStars = data.getPlaytimeStars(player);
                                 ctx.getSource().sendSuccess(() ->
-                                        Component.literal("§a你的星数: §e" + (manualStars + playtimeStars)
-                                                + " §a(在线时长奖励: §e" + playtimeStars + "§a)"), false);
+                                        Component.literal("你的星数: ").withStyle(ChatFormatting.GREEN)
+                                                .append(Component.literal(String.valueOf(manualStars + playtimeStars))
+                                                        .withStyle(ChatFormatting.YELLOW))
+                                                .append(Component.literal(" (在线时长奖励: ").withStyle(ChatFormatting.GREEN))
+                                                .append(Component.literal(String.valueOf(playtimeStars))
+                                                        .withStyle(ChatFormatting.YELLOW))
+                                                .append(Component.literal(")").withStyle(ChatFormatting.GREEN)), false);
                                 return 1;
                             }))
                     .then(Commands.literal("topstars")
                             .executes(ctx -> {
                                 List<Map.Entry<String, Integer>> entries = collectStars();
                                 ctx.getSource().sendSuccess(() ->
-                                        Component.literal("§6===== 星数排行榜（前 10）====="), false);
+                                        Component.literal("===== 星数排行榜（前 10）=====")
+                                                .withStyle(ChatFormatting.GOLD), false);
                                 for (int i = 0; i < 10; i++) {
                                     final int rank = i + 1;
                                     if (i >= entries.size()) {
                                         // 人数不足 10 时，后面的名次显示 "-"
-                                        final String line = "§e#" + rank + " §7-";
+                                        final int r = rank;
                                         ctx.getSource().sendSuccess(() ->
-                                                Component.literal(line), false);
+                                                Component.literal("#" + r).withStyle(ChatFormatting.YELLOW)
+                                                        .append(Component.literal(" -").withStyle(ChatFormatting.GRAY)), false);
                                         continue;
                                     }
                                     Map.Entry<String, Integer> e = entries.get(i);
@@ -110,8 +124,13 @@ public class SerendiChatCommands {
                                     final int t = total;
                                     final int p = playtime;
                                     ctx.getSource().sendSuccess(() ->
-                                            Component.literal("§e#" + rank + " §a" + n
-                                                    + " §7- §e" + t + " §7星 §8(奖励 " + p + ")"), false);
+                                            Component.literal("#" + rank).withStyle(ChatFormatting.YELLOW)
+                                                    .append(Component.literal(" " + n).withStyle(ChatFormatting.GREEN))
+                                                    .append(Component.literal(" - ").withStyle(ChatFormatting.GRAY))
+                                                    .append(Component.literal(String.valueOf(t)).withStyle(ChatFormatting.YELLOW))
+                                                    .append(Component.literal(" 星 ").withStyle(ChatFormatting.GRAY))
+                                                    .append(Component.literal("(奖励 " + p + ")")
+                                                            .withStyle(ChatFormatting.DARK_GRAY)), false);
                                 }
                                 return 1;
                             }))
@@ -120,13 +139,13 @@ public class SerendiChatCommands {
                             .executes(ctx -> {
                                 reloadAction.run();
                                 ctx.getSource().sendSuccess(() ->
-                                        Component.literal("§a配置已重新加载！"), false);
+                                        Component.literal("配置已重新加载！").withStyle(ChatFormatting.GREEN), false);
                                 return 1;
                             }))
             );
 
-            // ----- 私信命令: /msg /tell /whisper 都注册一份 -----
-            for (String cmd : new String[]{"msg", "tell", "whisper"}) {
+            // ----- 私信命令: /msg /tell /w /whisper 都注册一份 -----
+            for (String cmd : new String[]{"msg", "tell", "whisper", "w"}) {
                 dispatcher.register(Commands.literal(cmd)
                         .then(Commands.argument("target", StringArgumentType.word())
                                 .then(Commands.argument("message", StringArgumentType.greedyString())
@@ -208,15 +227,28 @@ public class SerendiChatCommands {
     }
 
     private static void sendHelp(CommandSourceStack source) {
-        source.sendSuccess(() -> Component.literal("§6===== SerendiChat 命令帮助 ====="), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat stars §7- 查询你的星数"), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat topstars §7- 查看星数排行榜"), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat help §7- 显示本帮助信息"), false);
-        source.sendSuccess(() -> Component.literal("§e/msg|告诉|whisper <玩家> <消息> §7- 发送私信"), false);
-        source.sendSuccess(() -> Component.literal("§e/r <消息> §7- 回复最近一次私信"), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat setstars <玩家> <星数> §7- 设置玩家星数 §8(管理员)"), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat resetstars <玩家> §7- 重置玩家星数 §8(管理员)"), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat admincolor <true|false> §7- 开关管理员红色聊天 §8(管理员)"), false);
-        source.sendSuccess(() -> Component.literal("§e/serendichat reload §7- 重载配置文件 §8(管理员)"), false);
+        source.sendSuccess(() ->
+                Component.literal("===== SerendiChat 命令帮助 =====").withStyle(ChatFormatting.GOLD), false);
+        helpLine(source, "/serendichat stars", "查询你的星数", false);
+        helpLine(source, "/serendichat topstars", "查看星数排行榜", false);
+        helpLine(source, "/msg|tell|w|whisper <玩家> <消息>", "发送私信", false);
+        helpLine(source, "/r <消息>", "回复最近一次私信", false);
+        helpLine(source, "/serendichat help", "显示本帮助信息", false);
+        helpLine(source, "/serendichat setstars <玩家> <星数>", "设置玩家星数", true);
+        helpLine(source, "/serendichat resetstars <玩家>", "重置玩家星数", true);
+        helpLine(source, "/serendichat admincolor <true|false>", "开关管理员红色聊天", true);
+        helpLine(source, "/serendichat reload", "重载配置文件", true);
+    }
+
+    private static void helpLine(CommandSourceStack source, String cmd, String desc, boolean admin) {
+        source.sendSuccess(() -> {
+            MutableComponent line = Component.empty()
+                    .append(Component.literal(cmd).withStyle(ChatFormatting.YELLOW))
+                    .append(Component.literal(" - " + desc).withStyle(ChatFormatting.GRAY));
+            if (admin) {
+                line.append(Component.literal(" (管理员)").withStyle(ChatFormatting.DARK_GRAY));
+            }
+            return line;
+        }, false);
     }
 }

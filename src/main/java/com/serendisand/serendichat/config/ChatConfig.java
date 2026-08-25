@@ -9,11 +9,8 @@ import java.util.Map;
 public class ChatConfig {
 
     // ----- 聊天格式 -----
-    /** 聊天格式字符串（占位符: {stars}, {prefix}, {nickname}, {suffix}, {message}） */
-    public String format = "[{stars}※] <{prefix} {nickname} {suffix}> -> {message}";
-    /** 星标是否用 [] 包裹 */
+    /** 完整布局为 [星数※] <称号 昵称 后缀> -> 消息，由 star_bracket/name_bracket 控制包裹 */
     public boolean starBracketEnabled = true;
-    /** 玩家名是否用 <> 包裹 */
     public boolean nameBracketEnabled = true;
 
     // ----- 颜色与星数 -----
@@ -25,6 +22,8 @@ public class ChatConfig {
     public int maxStars = 1000;
     /** 每 N 小时在线时长获得 1 星 */
     public int starsPerHour = 1;
+    /** 离线玩家名字缓存上限（LRU，超出淘汰最久未使用的） */
+    public int nameCacheMaxSize = 10000;
 
     // ----- 富文本 -----
     public boolean markdownEnabled = true;
@@ -65,5 +64,4 @@ public class ChatConfig {
     public String starsColor60 = "AQUA";
     public String starsColor80 = "BLUE";
     public String starsColor100 = "RED";
-    public String starsColorRainbow = "RAINBOW";
 }

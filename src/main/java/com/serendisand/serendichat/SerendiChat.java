@@ -16,12 +16,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class SerendiChat implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("SerendiChat");
-
-    private ChatLogger chatLogger;
 
     @Override
     public void onInitialize() {
@@ -36,18 +35,19 @@ public class SerendiChat implements ModInitializer {
         PlayerDataManager data = new PlayerDataManager(config);
         CustomNameCompat customName = CustomNameCompat.detect();
         ChatFormatter formatter = new ChatFormatter(config, data, customName);
-        chatLogger = new ChatLogger(config);
+        // 用引用持有 logger，reload 时原子换新实例，事件侧通过 supplier 始终拿到最新的
+        AtomicReference<ChatLogger> chatLogger = new AtomicReference<>(new ChatLogger(config));
         PrivateMessageManager pm = new PrivateMessageManager(config, customName);
 
-        new ServerEvents(config, data, formatter, chatLogger).register();
+        new ServerEvents(config, data, formatter, chatLogger::get, pm).register();
         new SerendiChatCommands(data, pm, () -> {
             configManager.load(config);
             EmojiReplacer.invalidateCache();
-            // 重建 logger 以响应 chatLogEnabled 切换
-            if (chatLogger != null) {
-                chatLogger.close();
+            // 换新 logger 以响应 chatLogEnabled 切换；旧实例排空剩余队列后关闭
+            ChatLogger old = chatLogger.getAndUpdate(prev -> new ChatLogger(config));
+            if (old != null) {
+                old.close();
             }
-            chatLogger = new ChatLogger(config);
         }).register();
 
         LOGGER.info("SerendiChat initialized successfully! CustomName API: {}",
