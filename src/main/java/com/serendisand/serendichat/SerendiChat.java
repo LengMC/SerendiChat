@@ -27,13 +27,13 @@ public class SerendiChat implements ModInitializer {
 
     /**
      * bStats plugin id 与平台名。
-     * 面板: https://bstats.org/plugin/server-implementation/SerendiChat/33629
+     * 面板: https://bstats.org/plugin/bukkit/SerendiChat/33632
      * 平台名必须与 bStats 后台注册时填写的一致——上报 URL 是
      * {@code https://bstats.org/api/v2/data/<platform>}，平台不对会返回 HTTP 404 "Software not found"。
      * 开关由 {@code config/bstats/config.txt} 控制（用户可设 {@code enabled=false} 关闭）。
      */
-    private static final int BSTATS_PLUGIN_ID = 33629;
-    private static final String BSTATS_PLATFORM = "server-implementation";
+    private static final int BSTATS_PLUGIN_ID = 33632;
+    private static final String BSTATS_PLATFORM = "bukkit";
 
     @Override
     public void onInitialize() {
