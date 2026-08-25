@@ -1,5 +1,7 @@
 # SerendiChat
 
+<img src="https://raw.githubusercontent.com/Serendisand/SerendiChat/master/src/main/resources/assets/serendichat/icon.png" alt="SerendiChat" width="180" align="right" />
+
 一个面向 **Minecraft 26.2** 的 [Fabric](https://fabricmc.net/) **服务端**聊天增强模组。它用「星数」系统为玩家在线时长提供可视化激励，并带来富文本聊天、@提及、物品展示、私信增强等一整套现代化聊天体验。
 
 > 纯服务端模组（`environment: "server"`），客户端无需安装。

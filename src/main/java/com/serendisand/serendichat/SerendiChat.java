@@ -25,6 +25,9 @@ public class SerendiChat implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("SerendiChat");
 
+    /** bStats plugin id。查看面板：https://bstats.org/plugin/server-implementation/SerendiChat/33629；开关由 config/bstats/config.txt 控制。 */
+    private static final int BSTATS_PLUGIN_ID = 33629;
+
     @Override
     public void onInitialize() {
         LOGGER.info("Initializing SerendiChat for Minecraft 26.2");
@@ -35,15 +38,14 @@ public class SerendiChat implements ModInitializer {
         ConfigManager configManager = new ConfigManager(configDir.resolve("serendichat.yml"));
         configManager.load(config);
 
-        // bStats 匿名指标（需在 bstats.org 注册并填 plugin_id 后才会真正上报）
-        if (config.bstatsEnabled) {
-            String pluginVersion = FabricLoader.getInstance()
-                    .getModContainer("serendichat")
-                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
-                    .orElse("unknown");
-            Metrics.init(config.bstatsPluginId, pluginVersion);
-            MetricsCharts.register();
-        }
+        // bStats 匿名指标：开关完全交给 bStats 自己的 config/bstats/config.txt，
+        // 这里只负责按 plugin id 初始化底层。plugin id <= 0 时 Metrics.init 静默跳过。
+        String pluginVersion = FabricLoader.getInstance()
+                .getModContainer("serendichat")
+                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                .orElse("unknown");
+        Metrics.init(BSTATS_PLUGIN_ID, pluginVersion);
+        MetricsCharts.register();
 
         // 关服时关闭 bStats 调度器，避免调度线程在 server thread 已停后还尝试 POST
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> Metrics.shutdown());

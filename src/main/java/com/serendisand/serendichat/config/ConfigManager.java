@@ -73,9 +73,6 @@ public class ConfigManager {
         config.chatLogEnabled = bool(data, "enable_chat_log", config.chatLogEnabled);
         config.chatLogFormat = str(data, "chat_log_format", config.chatLogFormat);
 
-        config.bstatsEnabled = bool(data, "bstats_enabled", config.bstatsEnabled);
-        config.bstatsPluginId = integer(data, "bstats_plugin_id", config.bstatsPluginId);
-
         Object emojiObj = data.get("emojis");
         if (emojiObj instanceof Map) {
             for (Map.Entry<String, Object> en : ((Map<String, Object>) emojiObj).entrySet()) {
@@ -160,11 +157,6 @@ public class ConfigManager {
                 "# 将所有聊天记录写入 config/serendichat_chat.log\n" +
                 "enable_chat_log: false\n" +
                 "chat_log_format: \"PLAIN\"\n\n" +
-                "# ----- bStats 指标 -----\n" +
-                "# 启用后每隔 30 分钟向 https://bstats.org 提交匿名统计（mod 版本、在线人数等）\n" +
-                "# 用户可随时在 config/bstats/config.txt 中关闭\n" +
-                "bstats_enabled: true\n" +
-                "bstats_plugin_id: 33629\n\n" +
                 "# ----- 星标颜色 -----\n" +
                 "stars_color_0: \"GRAY\"\n" +
                 "stars_color_20: \"GREEN\"\n" +
