@@ -69,9 +69,24 @@ jobs:
           echo "jar_path=${JAR_FILE}" >> $GITHUB_OUTPUT
           echo "jar_name=$(basename ${JAR_FILE})" >> $GITHUB_OUTPUT
 
+      # 检查 commit 标题是否以 release 开头（不区分大小写）
+      - name: Check commit title
+        id: check_release
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          echo "Commit message: $COMMIT_MSG"
+          if echo "$COMMIT_MSG" | grep -qi "^release"; then
+            echo "is_release=true" >> $GITHUB_OUTPUT
+            echo "✅ Commit starts with 'release' - will create Release"
+          else
+            echo "is_release=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Commit does not start with 'release' - skipping Release"
+          fi
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
+        if: steps.check_release.outputs.is_release == 'true'
         with:
           tag_name: ${{ steps.vars.outputs.tag }}
           name: "Release ${{ steps.vars.outputs.tag }}"
