@@ -57,6 +57,12 @@ public class ChatConfig {
     /** 日志格式: PLAIN（纯文本）或 JSON */
     public String chatLogFormat = "PLAIN";
 
+    // ----- bStats 指标 -----
+    /** 是否启用 bStats 匿名统计（https://bstats.org） */
+    public boolean bstatsEnabled = true;
+    /** bStats plugin id（0 表示未注册，不发送数据）；在 https://bstats.org 注册插件后可获得 */
+    public int bstatsPluginId = 33629;
+
     // ----- 星标颜色 -----
     public String starsColor0 = "GRAY";
     public String starsColor20 = "GREEN";
