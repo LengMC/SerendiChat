@@ -65,7 +65,8 @@ public class ConfigManager {
         config.urlClickEnabled = bool(data, "url_click_enabled", config.urlClickEnabled);
 
         config.privateMsgEnabled = bool(data, "enable_private_msg", config.privateMsgEnabled);
-        config.privateMsgFormat = str(data, "private_msg_format", config.privateMsgFormat);
+        config.privateMsgFormat = migratePrivateMsgFormat(
+                str(data, "private_msg_format", config.privateMsgFormat));
 
         config.spamCooldownSeconds = integer(data, "spam_cooldown_seconds", config.spamCooldownSeconds);
 
@@ -102,6 +103,24 @@ public class ConfigManager {
         if (v instanceof Integer i) return i;
         if (v instanceof Number n) return n.intValue();
         return def;
+    }
+
+    /**
+     * V1.4 之前私信用枚举值 "CHAT"/"ACTION"，模板化后变成字符串模板。
+     * 老配置原样读出后不含任何占位符，会触发 defaultTemplate 兜底并把发/收件人名吞掉。
+     * 这里把旧枚举值映射为等价的新模板，避免静默坏掉输出。
+     */
+    private static String migratePrivateMsgFormat(String raw) {
+        if (raw == null) return raw;
+        if ("CHAT".equalsIgnoreCase(raw)) {
+            LOGGER.warn("private_msg_format \"{}\" 已废弃，自动迁移为 CHAT 模板", raw);
+            return "[{from} -> {to}] {message}";
+        }
+        if ("ACTION".equalsIgnoreCase(raw)) {
+            LOGGER.warn("private_msg_format \"{}\" 已废弃，自动迁移为 ACTION 模板", raw);
+            return "* {from} 悄悄对 {to} 说: {message}*";
+        }
+        return raw;
     }
 
     private void createDefault() throws java.io.IOException {
