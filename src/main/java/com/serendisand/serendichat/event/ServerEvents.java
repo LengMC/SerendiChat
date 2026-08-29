@@ -142,7 +142,7 @@ public class ServerEvents {
 
             if (config.mentionSoundEnabled && ANVIL_LAND != null) {
                 // 26.2 中铁砧落地音效为 block.anvil.fall（原 block.anvil.land 已重命名）
-                target.playSound(ANVIL_LAND, 0.4f, 1.0f);
+                target.playSound(ANVIL_LAND, 1.0f, 1.0f);
             }
 
             target.sendOverlayMessage(tip);
